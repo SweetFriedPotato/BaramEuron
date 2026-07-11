@@ -1,0 +1,10 @@
+open/
+baseline/cache/
+outputs/
+*.joblib
+*.pt
+.venv/
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/
+

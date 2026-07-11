@@ -1,0 +1,23 @@
+seed: 42
+features:
+  time: true
+  weather_summary: true
+  nearest_grid: true
+  thermodynamic: true
+  correlation_selected_grid: false
+  distance_weighted_grid: false
+  power_curve_features: false
+  weather_lags: false
+model:
+  name: mlp
+  params:
+    hidden_dims: [64, 32]
+    dropout: 0.1
+    learning_rate: 0.001
+    batch_size: 512
+    max_epochs: 3
+    patience: 2
+    weight_decay: 0.00001
+    gradient_clip: 1.0
+postprocess: {lower_clip: 0, upper_clip: {enabled: false}}
+

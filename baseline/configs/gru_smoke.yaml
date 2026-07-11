@@ -1,0 +1,25 @@
+seed: 42
+features:
+  time: true
+  weather_summary: true
+  nearest_grid: true
+  thermodynamic: true
+  correlation_selected_grid: false
+  distance_weighted_grid: false
+  power_curve_features: false
+  weather_lags: false
+model:
+  name: gru
+  params:
+    sequence_length: 24
+    hidden_size: 64
+    num_layers: 1
+    dropout: 0.0
+    bidirectional: false
+    learning_rate: 0.001
+    batch_size: 512
+    max_epochs: 3
+    patience: 2
+    gradient_clip: 1.0
+postprocess: {lower_clip: 0, upper_clip: {enabled: false}}
+

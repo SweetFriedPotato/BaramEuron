@@ -1,0 +1,10 @@
+{
+  "note": "Schema example; values come from the completed 2024 time validation run.",
+  "macro_mae": 2201.0721852577713,
+  "macro_nmae": 0.10287145370821422,
+  "groups": {
+    "kpx_group_1": {"mae": 2225.5038698076573, "nmae": 0.10303258656516932},
+    "kpx_group_2": {"mae": 2177.835127801748, "nmae": 0.10082570036119204},
+    "kpx_group_3": {"mae": 2199.8775581639075, "nmae": 0.10475607419828131}
+  }
+}
