@@ -1,7 +1,6 @@
 import re
-import numpy as np
 from ..constants import TIME_COL
-from .weather import add_derived, LDAPS_WIND, GFS_WIND, THERMO
+from .weather import add_weather_aliases, weather_feature_columns
 
 def _decimal(s):
     nums=[float(x) for x in re.findall(r"\d+(?:\.\d+)?",str(s))]
@@ -19,13 +18,13 @@ def nearest_grid_ids(weather, centres):
     return {int(g): grids.assign(dist=(grids.latitude-r.lat)**2+(grids.longitude-r.lon)**2).dist.idxmin() for g,r in centres.iterrows()}
 
 def nearest_features(df, kind, centres, thermodynamic=True):
-    d=add_derived(df,kind); ids=nearest_grid_ids(d,centres)
-    cols=list((LDAPS_WIND if kind=="ldaps" else GFS_WIND)) + (["ws50_mid"] if kind=="ldaps" else ["surface_0_gust"])
-    if thermodynamic: cols += THERMO[kind]
+    d=add_weather_aliases(df,kind,thermodynamic); ids=nearest_grid_ids(d,centres)
+    cols=weather_feature_columns(kind,thermodynamic)
     parts=[]
     for group,gid in ids.items():
-        p=d.loc[d.grid_id==gid,[TIME_COL,*cols]].copy(); p=p.rename(columns={c:f"{kind}_g{group}_nearest_{c}" for c in cols}); parts.append(p)
+        p=d.loc[d.grid_id==gid,[TIME_COL,*cols]].copy()
+        p=p.rename(columns={c:f"group_{group}__{kind}_nearest__{c}" for c in cols})
+        parts.append(p)
     out=parts[0]
     for p in parts[1:]: out=out.merge(p,on=TIME_COL,how="inner",validate="one_to_one")
     return out,ids
-

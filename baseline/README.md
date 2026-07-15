@@ -1,28 +1,115 @@
-# Baram shared baseline
+# Baram shared preprocessing baseline
 
-최고 점수보다 RandomForest, MLP, GRU가 동일한 시간당 feature, 시간 split, metric, submission 경로를 공유하도록 만든 팀 공용 실험 틀이다. SCADA와 target lag는 사용하지 않으며 원본 `open/`과 공식 notebook을 수정하지 않는다. 공식 notebook은 저장소 루트의 `[Baseline]_기상 예보 데이터 기반 RandomForest 풍력발전량 예측.ipynb`이고 감사 결과는 `docs/official_baseline_summary.md`다.
+This folder owns the team-shared raw feature pipeline. It creates leak-aware hourly train/test feature tables that every model branch can reuse. It does not implement deep learning, CatBoost, Optuna, ensembling, or final performance tuning.
 
-## 설치와 실행
+`open/` is original competition data and must not be modified. `open/`, `outputs/`, and `baseline/cache/` are generated or local data paths and must not be committed to Git. SCADA is excluded from shared model features because no SCADA exists for test.
 
-저장소 루트에서 Python 3.11/3.12 환경을 권장한다.
+## Commands
+
+Run from the repository root:
 
 ```bash
-python -m venv .venv
-.venv/bin/pip install -r baseline/requirements.txt
-.venv/bin/python baseline/scripts/build_features.py --config baseline/configs/random_forest.yaml
-.venv/bin/python baseline/scripts/validate.py --config baseline/configs/random_forest.yaml
-.venv/bin/python baseline/scripts/validate.py --config baseline/configs/mlp_smoke.yaml
-.venv/bin/python baseline/scripts/validate.py --config baseline/configs/gru_smoke.yaml
-.venv/bin/python baseline/scripts/train_full.py --config baseline/configs/random_forest.yaml
-.venv/bin/python baseline/scripts/make_submission.py --config baseline/configs/random_forest.yaml
-PYTHONPATH=baseline/src .venv/bin/pytest baseline/tests
+python3 baseline/scripts/inspect_data.py \
+  --config baseline/configs/preprocessing.yaml
+
+python3 baseline/scripts/build_features.py \
+  --config baseline/configs/preprocessing.yaml
+
+python3 baseline/scripts/smoke_test_rf.py \
+  --config baseline/configs/preprocessing.yaml
+
+PYTHONPATH=baseline/src python3 -m pytest baseline/tests -q
 ```
 
-데이터 기본 위치는 `Baram/open/`이다. feature cache는 원본 크기/mtime, feature config, schema version hash를 사용한다. 각 run은 `outputs/runs/`, 제출은 `outputs/submissions/`에 저장된다.
+## Generated Files
 
-## 구조와 확장
+Data checks:
 
-`src/baram/features`는 시간·기상·공간·sequence를 분리하고, `models`는 registry와 공통 fit/predict/save 계약을 제공한다. 새 feature는 모듈에 구현한 뒤 config flag로 켜고 `common.py`에서 조합한다. 새 모델은 공통 계약을 구현하고 registry 및 `_model` factory에 등록한다. TCN/Transformer는 `make_sequences` 결과를 그대로 받을 수 있다.
+- `outputs/checks/data_contract.json`
+- `outputs/checks/time_semantics.json`
+- `outputs/checks/validation_split_summary.json`
 
-공용 config를 직접 수정하지 말고 `configs/exp_*.yaml`로 복사한다. branch는 `model/gru`, `model/lightgbm`, `feat/grid-weighted`처럼 한 관심사만 담는다. `open/`, cache, outputs, model artifact, 가상환경은 commit하지 않는다. 권장 실험 순서는 LightGBM/CatBoost, hub-height 보간 풍속, 거리 가중 grid, power curve/air density, 48시간 sequence다.
+Raw shared features:
 
+- `baseline/cache/features/train_features_raw.parquet`
+- `baseline/cache/features/test_features_raw.parquet`
+- `baseline/cache/features/train_labels.parquet`
+- `baseline/cache/features/feature_metadata.json`
+
+Smoke test:
+
+- `outputs/baseline_preprocessing_smoke/metrics.json`
+- `outputs/baseline_preprocessing_smoke/validation_predictions.csv`
+- `outputs/baseline_preprocessing_smoke/submission_smoke.csv`
+
+## Feature Tables
+
+The raw feature tables have exactly one row per `forecast_kst_dtm`. They do not include targets, SCADA, imputation, or scaling. Train and test column order is identical.
+
+Common features include:
+
+- Time: `hour`, `dayofweek`, `month`, `dayofyear`, cyclic encodings, `lead_time_h`
+- LDAPS wind: `ws10`, `ws50_mid`, `ws50_maxcomp`, `ws50_mincomp`
+- GFS wind: `ws10`, `ws80`, `ws100`, `ws_pbl`, `ws850`, `ws700`, `ws500`, `gust`
+- Weather: temperature, dew point, relative humidity, surface pressure, mean sea level pressure
+- Grid summaries: mean, max, min, std per selected dynamic weather variable
+
+Group nearest-grid features use explicit prefixes, for example:
+
+- `group_1__ldaps_nearest__ws50_mid`
+- `group_2__gfs_nearest__ws100`
+- `group_3__ldaps_nearest__surface_pressure`
+
+Use `baram.feature_builder.get_features_for_group(feature_table, group_id)` to select common columns plus only that group's nearest-grid columns. This keeps train/test schemas identical even when group models use different selected columns.
+
+`feature_metadata.json` records each feature's source, formula, unit, scope, train/test missing counts, constant flag, and config hash. It also notes that `ws50_maxcomp` and `ws50_mincomp` combine component-wise extrema and are not observed maximum/minimum wind speeds.
+
+## Labels
+
+Labels are stored separately in `train_labels.parquet`. Weather features and labels join by:
+
+`train_labels.kst_dtm == features.forecast_kst_dtm`
+
+Each target has its own valid mask:
+
+- `kpx_group_1`: rows where group 1 label exists
+- `kpx_group_2`: rows where group 2 label exists
+- `kpx_group_3`: rows where group 3 label exists
+
+Targets are never interpolated. A missing target for one group does not remove the row for the other groups.
+
+## Validation
+
+Random split is not used.
+
+- Group 1/2 train: 2022-2023 labels, represented by `2022-01-01 01:00:00` through `2024-01-01 00:00:00`
+- Group 3 train: 2023 labels, represented by `2023-01-01 01:00:00` through `2024-01-01 00:00:00`
+- Validation: 2024 labels, represented by `2024-01-01 01:00:00` through `2025-01-01 00:00:00`
+
+The `2025-01-01 00:00:00` label is the end timestamp of the final 2024 hourly interval.
+
+## Model Preprocessing Interfaces
+
+Raw shared features are intentionally unscaled and unimputed.
+
+Tree preprocessing:
+
+- `SimpleImputer(strategy="median")`
+- no scaler
+- fit only on the current fold's training rows
+
+Neural preprocessing:
+
+- `SimpleImputer(strategy="median")`
+- `StandardScaler`
+- both fit only on the current fold's training rows
+
+Use `fit_tree_preprocessor(...)` or `fit_neural_preprocessor(...)` from `baram.preprocessing`.
+
+## RandomForest Smoke Test
+
+`smoke_test_rf.py` trains one RandomForest per group only to verify preprocessing, splitting, imputation, metric, and submission contracts. It uses the official notebook parameters where available, but the resulting score is not a final performance experiment.
+
+## Adding Future Experiments
+
+Model branches should depend on the raw parquet files or on `build_feature_tables(config)`. Copy `baseline/configs/preprocessing.yaml` to an experiment config instead of editing the shared config directly. Add new features behind config flags and keep them out of `open/`. Fit imputers, scalers, encoders, feature selection, or model-specific transforms inside the fold/model pipeline, not in the shared raw feature cache.
