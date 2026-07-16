@@ -1,0 +1,30 @@
+experiment_id: raw_wind
+use_geo: false
+use_thermo: false
+use_engineered: false
+gated_fusion: false
+lambda_ficr: 0.20
+temperature: 0.005
+aux_weight: 0.05
+model:
+  token_dim: 64
+  attention_heads: 4
+  attention_dropout: 0.10
+  hidden_channels: 128
+  kernel_size: 3
+  dilations: [1, 2, 4, 8]
+  temporal_dropout: 0.15
+  non_causal: true
+training:
+  seeds: [42, 52, 62]
+  batch_size: 16
+  max_epochs: 100
+  smoke_epochs: 3
+  patience: 12
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+  amp: true
+preprocessing:
+  lower_quantile: 0.001
+  upper_quantile: 0.999

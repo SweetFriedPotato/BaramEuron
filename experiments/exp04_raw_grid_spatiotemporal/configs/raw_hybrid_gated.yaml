@@ -1,0 +1,6 @@
+experiment_id: raw_hybrid_gated
+inherits: raw_wind.yaml
+use_geo: true
+use_thermo: true
+use_engineered: true
+gated_fusion: true

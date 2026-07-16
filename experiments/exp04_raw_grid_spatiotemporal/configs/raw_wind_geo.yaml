@@ -1,0 +1,6 @@
+experiment_id: raw_wind_geo
+inherits: raw_wind.yaml
+use_geo: true
+use_thermo: false
+use_engineered: false
+gated_fusion: false

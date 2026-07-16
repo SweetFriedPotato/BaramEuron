@@ -1,0 +1,1 @@
+"""Raw-grid spatiotemporal experiment."""
