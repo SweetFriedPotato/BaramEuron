@@ -114,6 +114,7 @@ class RawGridSpatiotemporalModel(nn.Module):
         time = self.time_encoder(self._time_features(raw))
         parts.append(time)
         hidden = self.temporal(self.final_projection(torch.cat(parts, dim=-1)))
+        hidden = self.transform_group_hidden(hidden)
         power = self.power_head(hidden).squeeze(-1)
         auxiliary = self.auxiliary_head(hidden).squeeze(-1)
         diagnostics = {
@@ -122,6 +123,10 @@ class RawGridSpatiotemporalModel(nn.Module):
             "source_gate": gate,
         }
         return power, auxiliary, diagnostics
+
+    def transform_group_hidden(self, hidden: torch.Tensor) -> torch.Tensor:
+        """Extension point for target-free cross-group representation modules."""
+        return hidden
 
 
 def build_model(

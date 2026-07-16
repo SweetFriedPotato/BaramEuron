@@ -1,0 +1,9 @@
+global_raw_weight: 0.40
+coarse_weights: {start: 0.0, stop: 0.80, step: 0.05}
+fine_range: 0.05
+fine_step: 0.01
+lambda_global: [0.002, 0.005, 0.010]
+lambda_spread: [0.001, 0.003, 0.005]
+lambda_instability: [0.001, 0.003]
+minimum_aggregate_score: 0.648440
+minimum_group3_score: 0.617185

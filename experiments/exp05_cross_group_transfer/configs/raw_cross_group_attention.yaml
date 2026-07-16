@@ -1,0 +1,10 @@
+base_variant: raw_hybrid_gated
+layers: 1
+heads: 2
+dropout: 0.10
+pre_norm: true
+residual: true
+smoke_epochs: 5
+lambda_ficr: 0.20
+aux_weight: 0.05
+conditional_mean_loss_weights: [0.01, 0.03]

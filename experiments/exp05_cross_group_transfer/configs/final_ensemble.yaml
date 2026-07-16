@@ -1,0 +1,12 @@
+maximum_candidates: 4
+maximum_models: 3
+reference_global_weight: 0.40
+acceptance:
+  minimum_aggregate_score: 0.648940
+  minimum_improved_quarters: 5
+  maximum_worst_degradation: 0.003
+  minimum_group3_score: 0.617185
+stage_d_skip:
+  minimum_score: 0.649440
+  minimum_group3_score: 0.619185
+  minimum_conditions: 2

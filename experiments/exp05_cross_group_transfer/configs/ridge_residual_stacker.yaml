@@ -1,0 +1,6 @@
+alphas: [0.1, 1.0, 10.0, 100.0]
+shrinkages: [0.25, 0.50, 0.75, 1.00]
+final_bounds: {kpx_group_1: 0.05, kpx_group_2: 0.05, kpx_group_3: 0.07}
+diagnostic_bounds: [0.08, 0.10]
+minimum_gain: 0.001
+maximum_worst_quarter_degradation: 0.003

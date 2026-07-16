@@ -104,7 +104,8 @@ def predict_raw(
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     predictions: list[np.ndarray] = []
     diagnostics: dict[str, list[np.ndarray]] = {
-        "ldaps_attention": [], "gfs_attention": [], "source_gate": []
+        "ldaps_attention": [], "gfs_attention": [], "source_gate": [],
+        "cross_group_attention": [],
     }
     model.eval()
     with torch.no_grad():
@@ -114,7 +115,7 @@ def predict_raw(
             predictions.append(power.detach().cpu().numpy())
             if capture_diagnostics:
                 for name in diagnostics:
-                    value = values[name]
+                    value = values.get(name)
                     if value is not None:
                         diagnostics[name].append(value.detach().cpu().numpy())
     merged = {

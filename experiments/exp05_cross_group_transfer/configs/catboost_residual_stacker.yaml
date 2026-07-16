@@ -1,0 +1,9 @@
+depths: [4, 5]
+iterations: 600
+learning_rate: 0.03
+l2_leaf_reg: 5.0
+loss_function: MAE
+seeds: [42, 52, 62]
+shrinkages: [0.25, 0.50, 0.75, 1.00]
+final_bounds: {kpx_group_1: 0.05, kpx_group_2: 0.05, kpx_group_3: 0.07}
+early_stopping_rounds: 40
