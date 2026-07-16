@@ -1,0 +1,8 @@
+reference_score: 0.6474395993905896
+minimum_piecewise_score: 0.649440
+minimum_improved_quarters: 6
+maximum_worst_degradation: 0.002
+minimum_group3_score: 0.6288882169170712
+maximum_nmae_degradation: 0.001
+maximum_change_p95_fraction: 0.02
+maximum_submissions: 2

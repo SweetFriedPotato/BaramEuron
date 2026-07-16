@@ -1,0 +1,11 @@
+lambda_ficr: 0.20
+lambda_prior: [0.01, 0.03, 0.05, 0.10]
+temperature: 0.005
+learning_rate: 0.03
+epochs: 250
+hidden: 8
+l2: 0.0001
+temporal_smoothness: 0.002
+minimum_deployable_headroom: 0.003
+mlp_promising_gain: 0.001
+fallback_weight: 0.40

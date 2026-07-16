@@ -1,0 +1,13 @@
+schemes: [two_band, physical_three, quantile_three]
+scale_bounds: [0.97, 1.03]
+offset_fraction_bounds: [-0.02, 0.02]
+coarse_scale_step: 0.01
+coarse_offset_step: 0.005
+fine_scale_step: 0.0025
+fine_offset_step: 0.00125
+fine_scale_radius: 0.01
+fine_offset_radius: 0.005
+identity_penalties: [0.0005, 0.002]
+smoothness_penalties: [0.0005, 0.002]
+instability_penalties: [0.0005, 0.002]
+coordinate_passes: 2

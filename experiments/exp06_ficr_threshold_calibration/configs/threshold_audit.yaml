@@ -1,0 +1,9 @@
+thresholds: [0.06, 0.08]
+rewards: [4.0, 3.0, 0.0]
+margin_windows:
+  - [0.055, 0.065]
+  - [0.075, 0.085]
+wind_quantiles: [0.0, 0.33, 0.67, 1.0]
+disagreement_bands: [0.0, 0.02, 0.05, 0.10, 10.0]
+predicted_cf_bands: [0.0, 0.30, 0.70, 1.20]
+lead_time_bands: [12, 20, 28, 36]
