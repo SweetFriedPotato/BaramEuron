@@ -1,0 +1,24 @@
+experiment_id: tcn_aux_015
+model_type: tcn
+aux_weight: 0.15
+model:
+  projection_dim: 128
+  hidden_channels: 128
+  kernel_size: 3
+  dilations: [1, 2, 4, 8]
+  dropout: 0.15
+  non_causal: true
+training:
+  seeds: [42, 52, 62]
+  batch_size: 32
+  max_epochs: 100
+  smoke_epochs: 3
+  patience: 12
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+  amp: true
+  scheduler: plateau
+preprocessing:
+  lower_quantile: 0.001
+  upper_quantile: 0.999

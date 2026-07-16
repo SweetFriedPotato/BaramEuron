@@ -1,0 +1,20 @@
+experiment_id: mlp_pointwise
+model_type: mlp
+aux_weight: 0.0
+model:
+  hidden_dims: [256, 128]
+  dropout: [0.15, 0.10]
+training: &training
+  seeds: [42, 52, 62]
+  batch_size: 32
+  max_epochs: 100
+  smoke_epochs: 3
+  patience: 12
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+  amp: true
+  scheduler: plateau
+preprocessing: &preprocessing
+  lower_quantile: 0.001
+  upper_quantile: 0.999

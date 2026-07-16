@@ -1,0 +1,10 @@
+tcn_weights: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0]
+selection:
+  primary: fold_b_macro_nmae
+  january_must_not_worsen: true
+  common_weight_across_groups: true
+  seed_instability_threshold: 0.003
+  unstable_max_tcn_weight: 0.3
+postprocess:
+  lower_clip: 0.0
+  upper_clip: false
