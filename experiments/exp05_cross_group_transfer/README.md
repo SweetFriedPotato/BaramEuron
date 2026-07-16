@@ -8,3 +8,13 @@ The OOF contract reproduces the Exp04 global 0.40 blend before any search. Every
 PYTHONPATH=baseline/src:. python -m pytest experiments/exp05_cross_group_transfer/tests -q
 PYTHONPATH=baseline/src:. python -m experiments.exp05_cross_group_transfer.src.ensemble
 ```
+
+Colab runtimes and Drive mount credentials are ephemeral. After mounting Drive on a replacement VM,
+restore the branch, raw data, and baseline feature cache with:
+
+```bash
+python /content/drive/MyDrive/Baram/bootstrap_exp05_colab.py
+```
+
+The persistent raw archive is `MyDrive/Baram/cache/baram_open.tar.gz`; completed run artifacts are
+written under `MyDrive/Baram/runs/exp05_cross_group_transfer/`.
