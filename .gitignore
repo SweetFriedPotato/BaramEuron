@@ -1,6 +1,8 @@
 open/
 baseline/cache/
 outputs/
+**/outputs/
+experiments/**/outputs/
 .venv/
 .pytest_cache/
 __pycache__/
@@ -11,5 +13,7 @@ __pycache__/
 *.pth
 *.npy
 *.npz
+*.cbm
 .ipynb_checkpoints/
 .DS_Store
+

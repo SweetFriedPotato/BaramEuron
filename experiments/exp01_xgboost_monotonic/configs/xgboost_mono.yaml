@@ -1,0 +1,53 @@
+seed: 42
+
+# 1. 베이스라인과 동일하게 데이터 및 캐시 경로 설정
+data:
+  root: open
+  train_dir: open/train
+  test_dir: open/test
+  metadata: open/info.xlsx
+  sample_submission: open/sample_submission.csv
+
+# 2. 이번 실험에서 사용할 피처 블록 설정
+features: &features
+  time: true
+  weather_summary: true
+  nearest_grid: true
+  thermodynamic: true                 
+  correlation_selected_grid: false
+  distance_weighted_grid: true        
+  power_curve_features: true          
+  weather_lags: false
+
+# 3. XGBoost 하이퍼파라미터 정의
+model:
+  name: xgboost
+  params:
+    n_estimators: 1500           
+    max_depth: 10                
+    learning_rate: 0.025         
+    subsample: 0.8               
+    colsample_bytree: 0.8       
+    min_child_weight: 5          
+    tree_method: "hist"
+    random_state: 42
+    n_jobs: -1
+
+# 4. XGBoost 전용 단조 제약 피처 정의
+# (학습 시 features.py가 이 정보를 읽어와 트리 분할에 제약 걺)
+monotonic_features:
+  gfs_wind_speed_100m: 1
+  ldaps_wind_speed_50m: 1
+  wind_speed_cubed: 1                 # 풍속의 세제곱
+  air_density: 1                      # 공기 밀도
+
+postprocess:
+  lower_clip: 0
+  upper_clip:
+    enabled: false
+    kpx_group_1: 21600
+    kpx_group_2: 21600
+    kpx_group_3: 21000
+
+cache_dir: baseline/cache
+output_root: experiments/exp01_xgboost_monotonic/outputs  
