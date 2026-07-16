@@ -1,0 +1,17 @@
+experiment_id: rf_reference
+ablation_label: A
+description: Official-notebook RandomForest on shared baseline features
+model:
+  type: random_forest
+  params:
+    n_estimators: 120
+    max_depth: 14
+    min_samples_leaf: 8
+    max_features: sqrt
+    random_state: 42
+    n_jobs: -1
+feature_blocks:
+  spatial: false
+  wind_physics: false
+  thermodynamic: false
+  forecast_disagreement: false

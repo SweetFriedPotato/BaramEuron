@@ -1,0 +1,25 @@
+experiment_id: catboost_wind_physics
+ablation_label: D
+description: CatBoost spatial plus hub-height, shear, and nonlinear wind features
+model:
+  type: catboost
+  params:
+    loss_function: MAE
+    eval_metric: MAE
+    iterations: 2500
+    learning_rate: 0.03
+    depth: 8
+    l2_leaf_reg: 5
+    random_seed: 42
+    early_stopping_rounds: 150
+    verbose: 100
+    allow_writing_files: false
+feature_blocks:
+  spatial: true
+  wind_physics: true
+  thermodynamic: false
+  forecast_disagreement: false
+wind_physics:
+  alpha_quantiles: [0.01, 0.99]
+  minimum_wind_speed: 0.1
+  bins_mps: [3, 7, 11, 20]

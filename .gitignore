@@ -11,5 +11,7 @@ __pycache__/
 *.pth
 *.npy
 *.npz
+*.cbm
+experiments/**/outputs/
 .ipynb_checkpoints/
 .DS_Store

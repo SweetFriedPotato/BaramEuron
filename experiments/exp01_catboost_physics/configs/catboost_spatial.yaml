@@ -1,0 +1,21 @@
+experiment_id: catboost_spatial
+ablation_label: C
+description: CatBoost basic plus target-free spatial wind features
+model:
+  type: catboost
+  params:
+    loss_function: MAE
+    eval_metric: MAE
+    iterations: 2500
+    learning_rate: 0.03
+    depth: 8
+    l2_leaf_reg: 5
+    random_seed: 42
+    early_stopping_rounds: 150
+    verbose: 100
+    allow_writing_files: false
+feature_blocks:
+  spatial: true
+  wind_physics: false
+  thermodynamic: false
+  forecast_disagreement: false
