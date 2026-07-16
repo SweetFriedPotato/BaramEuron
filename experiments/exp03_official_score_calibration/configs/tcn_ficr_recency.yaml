@@ -1,0 +1,7 @@
+experiment_id: tcn_ficr_recency
+base_config: tcn_ficr_loss.yaml
+year_weights:
+  2022: 0.70
+  2023: 0.85
+  2024: 1.00
+checkpoint_metric: official_total_score

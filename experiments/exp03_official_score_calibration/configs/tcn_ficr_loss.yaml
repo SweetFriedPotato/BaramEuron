@@ -1,0 +1,12 @@
+experiment_id: tcn_ficr_loss
+base_config: ../exp02_daily_tcn_scada_aux/configs/tcn_aux_005.yaml
+power_loss: official_mask_mae_plus_soft_ficr
+official_target_capacity_fraction: 0.10
+official_thresholds: [0.06, 0.08]
+official_rewards: [4.0, 3.0, 0.0]
+lambda_candidates: [0.05, 0.10, 0.20, 0.30]
+temperature: 0.005
+aux_weight: 0.05
+seeds: [42, 52, 62]
+smoke_epochs: 5
+checkpoint_metric: official_total_score

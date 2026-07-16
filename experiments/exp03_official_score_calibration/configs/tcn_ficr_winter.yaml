@@ -1,0 +1,6 @@
+experiment_id: tcn_ficr_winter
+base_config: tcn_ficr_loss.yaml
+winter_months: [12, 1, 2]
+winter_weight: 1.15
+other_weight: 1.0
+checkpoint_metric: official_total_score

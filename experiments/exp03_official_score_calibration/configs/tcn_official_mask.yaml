@@ -1,0 +1,8 @@
+experiment_id: tcn_official_mask
+base_config: ../exp02_daily_tcn_scada_aux/configs/tcn_aux_005.yaml
+power_loss: official_mask_mae
+official_target_capacity_fraction: 0.10
+aux_weight: 0.05
+seeds: [42, 52, 62]
+smoke_epochs: 5
+checkpoint_metric: official_total_score

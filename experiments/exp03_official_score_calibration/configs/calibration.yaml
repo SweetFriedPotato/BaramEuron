@@ -1,0 +1,18 @@
+experiment_id: exp03_calibration
+blend:
+  minimum: 0.0
+  maximum: 1.0
+  step: 0.025
+  group_radius: 0.15
+affine:
+  scale_minimum: 0.90
+  scale_maximum: 1.10
+  offset_capacity_fraction: 0.03
+seasons:
+  winter: [12, 1, 2]
+  spring: [3, 4, 5]
+  summer: [6, 7, 8]
+  autumn: [9, 10, 11]
+selection:
+  use_public_scores: false
+  require_walk_forward: true
