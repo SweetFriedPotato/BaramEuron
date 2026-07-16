@@ -130,6 +130,22 @@ def run_cheap_stages(output: Path) -> dict:
     )
     ridge_details.to_csv(output / "metrics/ridge_stacker_scores.csv", index=False)
     cat_details.to_csv(output / "metrics/catboost_stacker_scores.csv", index=False)
+    importance_rows = []
+    for target in TARGETS:
+        ridge_estimator = ridge_model.models[target][0].named_steps["ridge"]
+        for feature, coefficient in zip(feature_columns, ridge_estimator.coef_):
+            importance_rows.append({
+                "model": "ridge", "target": target, "feature": feature,
+                "importance": abs(float(coefficient)), "signed_coefficient": float(coefficient),
+            })
+        for feature, importance in zip(
+            feature_columns, cat_model.models[target][0].get_feature_importance()
+        ):
+            importance_rows.append({
+                "model": "catboost", "target": target, "feature": feature,
+                "importance": float(importance), "signed_coefficient": np.nan,
+            })
+    pd.DataFrame(importance_rows).to_csv(output / "metrics/stacker_feature_importance.csv", index=False)
     january, high_wind = [], []
     for values, column, stage in stage_specs:
         j, h = slice_metrics(values, column); j.insert(0, "stage", stage); h.insert(0, "stage", stage)
@@ -144,6 +160,9 @@ def run_cheap_stages(output: Path) -> dict:
     pd.DataFrame(columns=["phase", "fold", "seed", "total_score"]).to_csv(
         output / "metrics/cross_group_attention_scores.csv", index=False
     )
+    pd.DataFrame(columns=[
+        "quarter", TIME_COL, "target", "group_id", "y_true_kwh", "y_pred_kwh", "status"
+    ]).to_csv(output / "predictions/cross_group_raw_oof.csv", index=False)
     # Final convex ensemble uses only nested OOF candidate predictions.
     ensemble_frame = contract.copy()
     ensemble_frame["constrained_prediction"] = constrained["constrained_prediction"].to_numpy()
@@ -168,6 +187,21 @@ def run_cheap_stages(output: Path) -> dict:
     )
     pd.concat([candidates, pd.DataFrame([final_summary])], ignore_index=True).to_csv(
         output / "metrics/final_candidate_scores.csv", index=False
+    )
+    pd.concat([pd.concat(quarter_tables, ignore_index=True), final_quarters], ignore_index=True).to_csv(
+        output / "metrics/nested_quarter_scores.csv", index=False
+    )
+    all_groups = pd.concat([pd.concat(group_tables, ignore_index=True), final_groups], ignore_index=True)
+    all_groups.to_csv(output / "metrics/group_scores.csv", index=False)
+    all_groups.loc[all_groups["group_id"].eq(3)].to_csv(output / "metrics/group3_scores.csv", index=False)
+    final_january, final_high_wind = slice_metrics(ensemble_frame, "final_prediction")
+    final_january.insert(0, "stage", "final_ensemble")
+    final_high_wind.insert(0, "stage", "final_ensemble")
+    pd.concat([*january, final_january], ignore_index=True).to_csv(
+        output / "metrics/january_scores.csv", index=False
+    )
+    pd.concat([*high_wind, final_high_wind], ignore_index=True).to_csv(
+        output / "metrics/high_wind_scores.csv", index=False
     )
 
     # Apply models fitted only on all rolling OOF residuals to aligned full-test base predictions.

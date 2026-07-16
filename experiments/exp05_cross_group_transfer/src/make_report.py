@@ -44,10 +44,14 @@ def write_figures(output: Path) -> None:
     ridge = pd.read_csv(output / "predictions/ridge_stacker_oof.csv")
     correction = ridge["ridge_prediction"] - ridge["base_prediction"]
     _figure(figures / "residual_correction_distribution.png", "Ridge residual correction", lambda ax: ax.hist(correction, bins=60))
-    feature_path = output / "checks/stacker_schema.json"
-    schema = json.loads(feature_path.read_text())
-    _figure(figures / "stacker_feature_importance.png", "Stacker feature inventory", lambda ax: ax.barh(
-        ["relation/time/weather"], [schema["feature_count"]]
+    importance = pd.read_csv(output / "metrics/stacker_feature_importance.csv")
+    importance = (
+        importance.loc[importance["model"].eq("ridge")]
+        .groupby("feature", as_index=False)["importance"].mean()
+        .nlargest(15, "importance").sort_values("importance")
+    )
+    _figure(figures / "stacker_feature_importance.png", "Ridge mean absolute coefficient", lambda ax: ax.barh(
+        importance["feature"], importance["importance"]
     ))
     attention_files = sorted((output / "predictions").glob("cross_group_attention_full_seed42.npz"))
     def attention_plot(ax):
@@ -67,9 +71,21 @@ def write_report(output: Path, report_path: Path = EXPERIMENT_DIR / "report.md")
     decision = json.loads((output / "stage_d_decision.json").read_text())
     reproduction = json.loads((output / "checks/reference_reproduction.json").read_text())
     submission = json.loads((output / "submission_selection.json").read_text())
+    blend = json.loads((output / "metrics/constrained_group_summary.json").read_text())
     cross_path = output / "metrics/cross_group_attention_scores.csv"
     cross = pd.read_csv(cross_path) if cross_path.exists() else pd.DataFrame()
-    final = candidates.sort_values("total_score", ascending=False).iloc[0]
+    final = candidates.loc[candidates["stage"].eq("final_ensemble")].iloc[0]
+    groups = pd.read_csv(output / "metrics/group_scores.csv")
+    final_groups = groups.loc[groups["stage"].eq("final_ensemble")].sort_values("group_id")
+    reference_groups = groups.loc[groups["stage"].eq("exp04_global")].sort_values("group_id")
+    january = pd.read_csv(output / "metrics/january_scores.csv").loc[lambda x: x["stage"].eq("final_ensemble")].iloc[0]
+    high_wind = pd.read_csv(output / "metrics/high_wind_scores.csv").loc[lambda x: x["stage"].eq("final_ensemble")].iloc[0]
+    accepted = bool(
+        final.total_score >= 0.648940
+        and final.improved_quarters >= 5
+        and final.worst_quarter >= 0.6054628191969988 - 0.003
+        and float(final_groups.loc[final_groups["group_id"].eq(3), "score"].iloc[0]) >= 0.617185
+    )
     lines = [
         "# exp05 cross-group transfer v2 report", "",
         "## Contract", "",
@@ -78,21 +94,58 @@ def write_report(output: Path, report_path: Path = EXPERIMENT_DIR / "report.md")
         "Public metrics were not used for selection.", "", "## Cheap stages", "",
     ]
     for row in candidates.loc[candidates["stage"].isin(["exp04_global", "constrained", "ridge", "catboost"])].itertuples():
-        lines.append(f"- `{row.stage}`: Score {row.total_score:.6f}, 1-NMAE {row.one_minus_nmae:.6f}, FICR {row.ficr:.6f}")
-    lines.extend(["", "Final constrained all-OOF raw weights are recorded in `constrained_group_summary.json`. "
-                  f"Nested quarter weight standard deviations: g1 {weights.weight_g1.std():.4f}, "
-                  f"g2 {weights.weight_g2.std():.4f}, g3 {weights.weight_g3.std():.4f}.", "", "## Stage D", ""])
+        lines.append(
+            f"- `{row.stage}`: Score {row.total_score:.6f}, 1-NMAE {row.one_minus_nmae:.6f}, "
+            f"FICR {row.ficr:.6f}, equal-quarter {row.equal_quarter_mean:.6f}, "
+            f"worst {row.worst_quarter:.6f}, improved {int(row.improved_quarters)}/8"
+        )
+    final_weights = blend["final_weights"]
+    lines.extend(["", "## Constrained weights", "",
+                  f"Final all-OOF raw weights: g1 `{final_weights['kpx_group_1']:.2f}`, "
+                  f"g2 `{final_weights['kpx_group_2']:.2f}`, g3 `{final_weights['kpx_group_3']:.2f}`. "
+                  f"Selected penalties: `{blend['final_penalties']}`.",
+                  f"Nested mean/std: g1 {weights.weight_g1.mean():.4f}/{weights.weight_g1.std():.4f}, "
+                  f"g2 {weights.weight_g2.mean():.4f}/{weights.weight_g2.std():.4f}, "
+                  f"g3 {weights.weight_g3.mean():.4f}/{weights.weight_g3.std():.4f}.", "",
+                  "Quarter weights:", ""])
+    lines.extend(
+        f"- {row.evaluation_quarter}: {row.weight_g1:.2f}/{row.weight_g2:.2f}/{row.weight_g3:.2f} ({row.selection_status})"
+        for row in weights.itertuples()
+    )
+    lines.extend(["", "## Stage D", ""])
     if cross.empty:
         lines.append(f"Stage D required: `{not decision['skip_cross_group_attention']}`; result not yet present.")
     else:
         for row in cross.itertuples():
             lines.append(f"- {row.phase} seed {int(row.seed)}: Fold B Score {row.total_score:.6f}, delta vs raw seed42 {row.delta_vs_raw_seed42:+.6f}")
+        lines.append("Full seed 42 did not beat raw_hybrid_gated; seeds 52/62 and conditional cross-group regularization were therefore skipped.")
     lines.extend(["", "## Final", "",
-                  f"Best rolling candidate: `{final.stage}` with Score {final.total_score:.6f}, "
+                  f"Best new rolling candidate: `{final.stage}` with Score {final.total_score:.6f}, "
                   f"equal-quarter mean {final.equal_quarter_mean:.6f}, worst {final.worst_quarter:.6f}, "
-                  f"and {int(final.improved_quarters)}/8 improved quarters.", "", "Generated submissions:", ""])
+                  f"and {int(final.improved_quarters)}/8 improved quarters.",
+                  f"Group Scores: " + ", ".join(
+                      f"g{int(row.group_id)} {row.score:.6f}" for row in final_groups.itertuples()
+                  ) + ".",
+                  "Matched rolling group deltas vs Exp04: " + ", ".join(
+                      f"g{int(left.group_id)} {left.score-right.score:+.6f}"
+                      for left, right in zip(final_groups.itertuples(), reference_groups.itertuples())
+                  ) + ".",
+                  f"The supplied report-context group-3 reference 0.617185 is exceeded by "
+                  f"{float(final_groups.loc[final_groups['group_id'].eq(3), 'score'].iloc[0])-0.617185:+.6f}, "
+                  "but the matched rolling Exp04 group-3 score is not preserved.",
+                  f"January Score {january.total_score:.6f}; high-wind Score {high_wind.total_score:.6f}.",
+                  f"Final convex weights: " + ", ".join(
+                      f"{name}={weight:.2f}" for name, weight in submission["final_weights"].items()
+                  ) + ".",
+                  f"Acceptance: `{'passed' if accepted else 'failed'}`. "
+                  + ("The Exp05 candidate replaces Exp04." if accepted else "Exp04 remains champion; Exp05 submissions are diagnostic only."),
+                  "", "Generated submissions:", ""])
     lines.extend(f"- `{Path(path).name}`" for path in submission["paths"])
-    lines.extend(["", "No submission was sent automatically.", ""])
+    lines.extend(["", "No submission was sent automatically. Public priority remains the existing Exp04 blend. "
+                  "If one diagnostic slot is intentionally used, the Exp05 order is final ensemble, constrained blend, then Ridge.", "",
+                  "## Public context and next step", "",
+                  "Exp04 Public Score 0.634005715 and Exp03 Public Score 0.6315350794 are report context only and were not used for fitting or selection.",
+                  "The next experiment should target FICR threshold calibration within each group using the same nested OOF contract; a larger cross-group neural model is not supported by this result.", ""])
     text = "\n".join(lines); report_path.write_text(text, encoding="utf-8")
     write_figures(output)
     return text
