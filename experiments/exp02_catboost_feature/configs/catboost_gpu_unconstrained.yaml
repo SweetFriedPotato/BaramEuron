@@ -1,0 +1,47 @@
+seed: 42
+
+data:
+  root: open
+  train_dir: open/train
+  test_dir: open/test
+  metadata: open/info.xlsx
+  sample_submission: open/sample_submission.csv
+
+features:
+  time: true
+  weather_summary: true
+  nearest_grid: true
+  distance_weighted_grid: true
+  wind_physics: true
+  thermodynamic: true
+  forecast_disagreement: true
+  advanced_meteorology: true
+
+model:
+  name: catboost
+  params:
+    iterations: 2000
+    depth: 8
+    learning_rate: 0.03
+    subsample: 0.8
+    bootstrap_type: Bernoulli
+    l2_leaf_reg: 5
+    task_type: GPU
+    random_seed: 42
+    thread_count: -1
+
+# CatBoost does not support monotone_constraints on GPU.  Keep this empty so the
+# parameter is omitted entirely, rather than passing a zero-filled constraint list.
+monotonic_features: {}
+require_gpu: true
+
+postprocess:
+  lower_clip: 0
+  upper_clip:
+    enabled: false
+    kpx_group_1: 21600
+    kpx_group_2: 21600
+    kpx_group_3: 21000
+
+cache_dir: baseline/cache
+output_root: experiments/exp02_catboost_feature/outputs/gpu_unconstrained

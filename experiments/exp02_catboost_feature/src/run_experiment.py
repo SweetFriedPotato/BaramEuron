@@ -145,8 +145,6 @@ def main():
         feature_names = X_train_imputed.columns.tolist()
         
         # CatBoost 형식에 맞는 단조성 제약 구조 배열 연산 처리
-        mono_constraints = get_monotonic_constraints(feature_names, config['monotonic_features'])
-        
         model_params = config['model']['params'].copy()
         
         # XGBoost용 파라미터가 config에 혼재되어 있는 경우를 대비한 네이밍 변환 및 기본값 매핑
@@ -155,7 +153,11 @@ def main():
         if 'iterations' not in model_params:
             model_params['iterations'] = 2000
             
-        model_params['monotone_constraints'] = mono_constraints
+        monotonic_features = config.get('monotonic_features', {})
+        if monotonic_features:
+            model_params['monotone_constraints'] = get_monotonic_constraints(feature_names, monotonic_features)
+        else:
+            model_params.pop('monotone_constraints', None)
         
         # 하위 컷오프 확인 프로세스 편의를 위한 시드 및 스레드 디폴트 처리
         model_params['random_seed'] = model_params.get('random_seed', 42)
@@ -172,7 +174,9 @@ def main():
             # 테스트 통과 시 실제 메인 파라미터 설정 적용
             model_params['task_type'] = 'GPU'
             model = cb.CatBoostRegressor(**model_params)
-        except Exception:
+        except Exception as error:
+            if config.get('require_gpu', False):
+                raise RuntimeError("CatBoost GPU validation failed; CPU fallback is disabled for this run.") from error
             print("Warning: CatBoost GPU training failed. Falling back to CPU.")
             model_params['task_type'] = 'CPU'
             model = cb.CatBoostRegressor(**model_params)
@@ -274,7 +278,6 @@ def main():
         X_train_imputed = pd.DataFrame(X_train_imputed_arr, columns=feature_names)
         X_test_imputed = pd.DataFrame(X_test_imputed_arr, columns=feature_names)
         
-        mono_constraints = get_monotonic_constraints(feature_names, config['monotonic_features'])
         model_params = config['model']['params'].copy()
         
         if 'n_estimators' in model_params:
@@ -282,7 +285,11 @@ def main():
         if 'iterations' not in model_params:
             model_params['iterations'] = 2000
             
-        model_params['monotone_constraints'] = mono_constraints
+        monotonic_features = config.get('monotonic_features', {})
+        if monotonic_features:
+            model_params['monotone_constraints'] = get_monotonic_constraints(feature_names, monotonic_features)
+        else:
+            model_params.pop('monotone_constraints', None)
         model_params['random_seed'] = model_params.get('random_seed', 42)
         model_params['verbose'] = False
         
@@ -295,7 +302,9 @@ def main():
             
             model_params['task_type'] = 'GPU'
             model = cb.CatBoostRegressor(**model_params)
-        except Exception:
+        except Exception as error:
+            if config.get('require_gpu', False):
+                raise RuntimeError("CatBoost GPU final training failed; CPU fallback is disabled for this run.") from error
             model_params['task_type'] = 'CPU'
             model = cb.CatBoostRegressor(**model_params)
             
