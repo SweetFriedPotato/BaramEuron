@@ -51,4 +51,4 @@ postprocess:
     kpx_group_3: 21000
 
 cache_dir: baseline/cache
-output_root: experiments/exp01_catboost/outputs  # 출력 경로 변경
+output_root: experiments/exp02_catboost_feature/outputs
