@@ -3,12 +3,12 @@ import os
 
 def drop_low_importance_features(report_path, threshold=0.05):
     print("=" * 60)
-    print(f"🔍 피처 중요도 분석 및 노이즈 필터링 시작 (기준값: {threshold})")
+    print(f"피처 중요도 분석 및 노이즈 필터링 시작 (기준값: {threshold})")
     print("=" * 60)
     
     # 1. 리포트 파일 존재 여부 확인
     if not os.path.exists(report_path):
-        print(f"❌ 에러: [{report_path}] 파일을 찾을 수 없습니다.")
+        print(f"에러: [{report_path}] 파일을 찾을 수 없습니다.")
         print("먼저 실험을 실행하여 'feature_importances_report.csv'를 생성해 주세요.")
         return None
         
@@ -23,17 +23,17 @@ def drop_low_importance_features(report_path, threshold=0.05):
     dropped_count = len(drop_df)
     kept_count = len(keep_df)
     
-    print(f"📊 총 피처 개수: {total_features}개")
-    print(f"✅ 유지할 피처 (중요도 >= {threshold}): {kept_count}개")
-    print(f"✂️ 드롭할 피처 (중요도 <  {threshold}): {dropped_count}개")
+    print(f"총 피처 개수: {total_features}개")
+    print(f"유지할 피처 (중요도 >= {threshold}): {kept_count}개")
+    print(f"드롭할 피처 (중요도 <  {threshold}): {dropped_count}개")
     print("-" * 60)
     
     if dropped_count == 0:
-        print(f"💡 중요도가 {threshold} 미만인 피처가 없습니다! 드롭할 필요가 없습니다.")
+        print(f"중요도가 {threshold} 미만인 피처가 없습니다! 드롭할 필요가 없습니다.")
         return list(keep_df['feature'])
         
     # 4. 드롭 대상 하위 피처 목록 출력 (최하위 10개 예시)
-    print(f"📉 드롭 대상 주요 하위 피처 (총 {dropped_count}개 중 일부):")
+    print(f"드롭 대상 주요 하위 피처 (총 {dropped_count}개 중 일부):")
     for idx, row in drop_df.head(10).iterrows():
         print(f"  - {row['feature']:<65} | 중요도: {row['importance']:.6f}")
         
@@ -54,7 +54,7 @@ def drop_low_importance_features(report_path, threshold=0.05):
         for feat in drop_features_list:
             f.write(f"{feat}\n")
             
-    print(f"💾 드롭 대상 피처 목록 파일 저장 완료: {drop_log_path}")
+    print(f"드롭 대상 피처 목록 파일 저장 완료: {drop_log_path}")
     print("=" * 60)
     
     return keep_features_list
@@ -72,7 +72,7 @@ def apply_drop_to_dataframe(df_train, df_test, drop_list):
     X_train_clean = df_train.drop(columns=cols_to_drop)
     X_test_clean = df_test.drop(columns=cols_to_drop) if df_test is not None else None
     
-    print(f"🧹 데이터프레임 정제 완료: {len(cols_to_drop)}개 피처 삭제됨.")
+    print(f"데이터프레임 정제 완료: {len(cols_to_drop)}개 피처 삭제됨.")
     return X_train_clean, X_test_clean
 
 

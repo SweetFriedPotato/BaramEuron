@@ -20,6 +20,35 @@ from .features import get_monotonic_constraints
 from .feature_blocks import FeatureBlockPipeline  
 
 
+def load_dropped_features(output_root):
+    """Load feature names selected for removal by feature_drop.py."""
+    drop_list_path = Path(output_root) / "dropped_features_list.txt"
+    if not drop_list_path.exists():
+        print(f"No feature drop list found at {drop_list_path}; using all features.")
+        return set()
+
+    with open(drop_list_path, "r", encoding="utf-8-sig") as f:
+        dropped_features = {line.strip() for line in f if line.strip()}
+
+    print(f"Loaded {len(dropped_features)} features to drop from: {drop_list_path}")
+    return dropped_features
+
+
+def apply_feature_drop(train_df, other_df, dropped_features):
+    """Drop the same available feature columns from a train/validation or train/test pair."""
+    columns_to_drop = [
+        column for column in train_df.columns
+        if column in dropped_features and column in other_df.columns
+    ]
+    train_clean = train_df.drop(columns=columns_to_drop)
+    other_clean = other_df.drop(columns=columns_to_drop)
+
+    if train_clean.shape[1] == 0:
+        raise ValueError("Feature dropping removed every available feature.")
+
+    return train_clean, other_clean, columns_to_drop
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Exp01: CatBoost Regressor with Meteor Re-engineering")
     parser.add_argument(
@@ -62,6 +91,7 @@ def main():
     
     output_root = args.output_root if args.output_root is not None else config.get("output_root", "experiments/exp02_catboost_feature/outputs")
     os.makedirs(output_root, exist_ok=True)
+    dropped_features = load_dropped_features(output_root)
     
     print("[1/4] Loading Raw Feature Artifacts...")
     raw_artifacts = load_raw_feature_artifacts(config)
@@ -141,6 +171,12 @@ def main():
         
         X_train_imputed = pd.DataFrame(X_train_imputed_arr, columns=feature_names)
         X_val_imputed = pd.DataFrame(X_val_imputed_arr, columns=feature_names)
+
+        X_train_imputed, X_val_imputed, dropped_columns = apply_feature_drop(
+            X_train_imputed, X_val_imputed, dropped_features
+        )
+        if dropped_columns:
+            print(f"Dropped {len(dropped_columns)} features for {fold_name} / group {group_id}.")
         
         feature_names = X_train_imputed.columns.tolist()
         
@@ -277,6 +313,14 @@ def main():
         
         X_train_imputed = pd.DataFrame(X_train_imputed_arr, columns=feature_names)
         X_test_imputed = pd.DataFrame(X_test_imputed_arr, columns=feature_names)
+
+        X_train_imputed, X_test_imputed, dropped_columns = apply_feature_drop(
+            X_train_imputed, X_test_imputed, dropped_features
+        )
+        if dropped_columns:
+            print(f"Dropped {len(dropped_columns)} features for final group {group_id}.")
+
+        feature_names = X_train_imputed.columns.tolist()
         
         model_params = config['model']['params'].copy()
         
