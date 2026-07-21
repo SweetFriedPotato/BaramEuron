@@ -35,6 +35,8 @@ model:
     random_seed: 42              
     thread_count: -1             
 
+final_iteration_multiplier: 1.0
+
 # 4. CatBoost 단조 제약 피처 정의
 monotonic_features:
   gfs_wind_speed_100m: 1

@@ -34,6 +34,7 @@ model:
 # parameter is omitted entirely, rather than passing a zero-filled constraint list.
 monotonic_features: {}
 require_gpu: true
+final_iteration_multiplier: 1.0
 
 postprocess:
   lower_clip: 0

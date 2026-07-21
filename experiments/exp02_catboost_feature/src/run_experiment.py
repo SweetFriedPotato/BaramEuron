@@ -1,5 +1,6 @@
 import os
 import argparse
+import copy
 import pathlib
 import yaml
 import pandas as pd
@@ -15,9 +16,92 @@ from baram.constants import TIME_COL as CONST_TIME_COL
 from baram.data import load_sample_submission
 from baram.submission import create_submission, postprocess
 from shared.constants import CAPACITY_KWH
-from shared.metrics import calculate_competition_metric
 from .features import get_monotonic_constraints
 from .feature_blocks import FeatureBlockPipeline  
+
+
+FOLD_SPECS = [
+    {
+        "fold": "Fold A",
+        "groups": (1, 2),
+        "validation": {
+            "group_1_2_train_start": "2022-01-01 01:00:00",
+            "group_1_2_train_end": "2023-01-01 00:00:00",
+            "valid_start": "2023-01-01 01:00:00",
+            "valid_end": "2024-01-01 00:00:00",
+        },
+    },
+    {
+        "fold": "Fold B",
+        "groups": (1, 2, 3),
+        "validation": {
+            "group_1_2_train_start": "2022-01-01 01:00:00",
+            "group_3_train_start": "2023-01-01 01:00:00",
+            "group_1_2_train_end": "2024-01-01 00:00:00",
+            "group_3_train_end": "2024-01-01 00:00:00",
+            "valid_start": "2024-01-01 01:00:00",
+            "valid_end": "2025-01-01 00:00:00",
+        },
+    },
+]
+
+
+def get_feature_blocks_config(config):
+    """Map YAML feature flags directly to FeatureBlockPipeline block names."""
+    features = config.get("features", {})
+    return {
+        "wind_physics": features.get("wind_physics", False),
+        "thermodynamic": features.get("thermodynamic", False),
+        "forecast_disagreement": features.get("forecast_disagreement", False),
+        "advanced_meteorology": features.get("advanced_meteorology", True),
+    }
+
+
+def calculate_group_metrics(y_true, y_pred, group_key):
+    """Calculate the competition components for one group."""
+    actual = np.asarray(y_true, dtype=float)
+    forecast = np.asarray(y_pred, dtype=float)
+    capacity = CAPACITY_KWH[group_key]
+    valid = actual >= capacity * 0.10
+    if not np.any(valid):
+        return {"nmae": 1.0, "one_minus_nmae": 0.0, "ficr": 0.0, "total_score": 0.0}
+
+    actual_valid = actual[valid]
+    error_rate = np.abs(forecast[valid] - actual_valid) / capacity
+    nmae = float(np.mean(error_rate))
+    unit_price = np.select(
+        [error_rate <= 0.06, error_rate <= 0.08],
+        [4.0, 3.0],
+        default=0.0,
+    )
+    max_settlement = float(np.sum(actual_valid * 4.0))
+    ficr = 0.0 if max_settlement == 0 else float(np.sum(actual_valid * unit_price) / max_settlement)
+    one_minus_nmae = 1.0 - nmae
+    return {
+        "nmae": nmae,
+        "one_minus_nmae": one_minus_nmae,
+        "ficr": ficr,
+        "total_score": 0.5 * one_minus_nmae + 0.5 * ficr,
+    }
+
+
+def calculate_oof_metrics(oof_predictions):
+    """Aggregate all chronological OOF rows using the competition's group averaging."""
+    group_metrics = {}
+    for group_key, group_frame in oof_predictions.groupby("target"):
+        group_metrics[group_key] = calculate_group_metrics(
+            group_frame["y_true"], group_frame["prediction"], group_key
+        )
+    missing = sorted(set(CAPACITY_KWH) - set(group_metrics))
+    if missing:
+        raise ValueError(f"Missing OOF predictions for groups: {missing}")
+    one_minus_nmae = float(np.mean([item["one_minus_nmae"] for item in group_metrics.values()]))
+    ficr = float(np.mean([item["ficr"] for item in group_metrics.values()]))
+    return {
+        "total_score": 0.5 * one_minus_nmae + 0.5 * ficr,
+        "one_minus_nmae": one_minus_nmae,
+        "ficr": ficr,
+    }, group_metrics
 
 
 def load_dropped_features(config):
@@ -125,12 +209,18 @@ def main():
         
     targets_df[time_col_name] = pd.to_datetime(targets_df[time_col_name])
     
-    all_oof_preds = []
-    all_oof_trues = []
+    oof_frames = []
+    fold_metric_rows = []
+    best_iterations_by_group = {1: [], 2: [], 3: []}
     importance_list = []
     
     print("[2/4] Starting Fold Validation...")
-    for fold_name, group_id in [("Fold A", 1), ("Fold A", 2), ("Fold B", 1), ("Fold B", 2), ("Fold B", 3)]:
+    validation_runs = [
+        (spec["fold"], group_id, spec["validation"])
+        for spec in FOLD_SPECS
+        for group_id in spec["groups"]
+    ]
+    for fold_name, group_id, validation_config in validation_runs:
         print(f"--- Processing {fold_name} | Group {group_id} ---")
         
         group_features = get_features_for_group(train_features, group_id).copy()
@@ -138,12 +228,29 @@ def main():
         
         group_features[time_col_name] = pd.to_datetime(group_features[time_col_name])
         group_data = pd.merge(group_features, targets_df[[time_col_name, target_col]], on=time_col_name, how="inner")
+        if group_data[time_col_name].duplicated().any():
+            raise ValueError(
+                f"Expected one row per prediction timestamp for group {group_id}, "
+                "but duplicate timestamps were found."
+            )
         
-        config["fold"] = fold_name
-        train_mask, val_mask = split_labeled_table(group_data, target_col, config)
+        fold_config = copy.deepcopy(config)
+        fold_config["fold"] = fold_name
+        fold_config["validation"] = copy.deepcopy(validation_config)
+        train_mask, val_mask = split_labeled_table(group_data, target_col, fold_config)
         
         train_df = group_data.loc[train_mask].reset_index(drop=True)
         val_df = group_data.loc[val_mask].reset_index(drop=True)
+        if train_df.empty or val_df.empty:
+            raise ValueError(
+                f"Empty split for {fold_name} / group {group_id}: "
+                f"train={len(train_df)}, validation={len(val_df)}"
+            )
+        print(
+            f"Train: {train_df[time_col_name].min()} -> {train_df[time_col_name].max()} "
+            f"({len(train_df)} rows) | Validation: {val_df[time_col_name].min()} -> "
+            f"{val_df[time_col_name].max()} ({len(val_df)} rows)"
+        )
         
         targets_to_drop = [c for c in group_data.columns if c.startswith("kpx_group_")]
         cols_to_drop = [time_col_name] + targets_to_drop
@@ -154,12 +261,7 @@ def main():
         y_val = val_df[target_col]
         
         # 기상 역학 및 풍력 공식 물리 엔진 블록 통합 구성
-        blocks_config = {
-            "wind_physics": config["features"].get("power_curve_features", False),
-            "thermodynamic": config["features"].get("thermodynamic", False),
-            "forecast_disagreement": config["features"].get("weather_summary", False),
-            "advanced_meteorology": config["features"].get("advanced_meteorology", True), # 신규 블록 활성화
-        }
+        blocks_config = get_feature_blocks_config(config)
         
         pipeline = FeatureBlockPipeline(
             blocks=blocks_config, 
@@ -233,36 +335,92 @@ def main():
             verbose=False
         )
         
-        val_preds_cap = model.predict(X_val_imputed)
-        
+        raw_val_predictions = model.predict(X_val_imputed)
         group_key = f"kpx_group_{group_id}"
-        val_preds_kwh = val_preds_cap 
-        val_trues_kwh = y_val.to_numpy()
-        
-        all_oof_preds.append(pd.DataFrame({group_key: val_preds_kwh}))
-        all_oof_trues.append(pd.DataFrame({group_key: val_trues_kwh}))
+        val_predictions = postprocess(
+            raw_val_predictions, group_key, config.get("postprocess", {})
+        )
+        val_trues = y_val.to_numpy()
+        best_iteration = int(model.tree_count_)
+        best_iterations_by_group[group_id].append(best_iteration)
+
+        fold_metrics = calculate_group_metrics(val_trues, val_predictions, group_key)
+        fold_metric_rows.append({
+            "fold": fold_name,
+            "group_id": group_id,
+            "target": group_key,
+            "train_start": str(train_df[time_col_name].min()),
+            "train_end": str(train_df[time_col_name].max()),
+            "valid_start": str(val_df[time_col_name].min()),
+            "valid_end": str(val_df[time_col_name].max()),
+            "train_rows": len(train_df),
+            "valid_rows": len(val_df),
+            "best_iteration": best_iteration,
+            **fold_metrics,
+        })
+        capacity = CAPACITY_KWH[group_key]
+        oof_frames.append(pd.DataFrame({
+            time_col_name: val_df[time_col_name].to_numpy(),
+            "fold": fold_name,
+            "group_id": group_id,
+            "target": group_key,
+            "y_true": val_trues,
+            "raw_prediction": raw_val_predictions,
+            "prediction": val_predictions,
+            "absolute_error": np.abs(val_predictions - val_trues),
+            "error_rate": np.abs(val_predictions - val_trues) / capacity,
+            "valid_for_metric": val_trues >= capacity * 0.10,
+        }))
+        print(
+            f"{fold_name} / group {group_id}: score={fold_metrics['total_score']:.5f}, "
+            f"1-NMAE={fold_metrics['one_minus_nmae']:.5f}, "
+            f"FICR={fold_metrics['ficr']:.5f}, best_iteration={best_iteration}"
+        )
         
         # 하위 변수 컷오프 분석 목적의 피처 임포턴스 데이터 취합 기록
         fold_importance = pd.DataFrame({
             "feature": feature_names,
-            "importance": model.get_feature_importance()
+            "importance": model.get_feature_importance(),
+            "fold": fold_name,
+            "group_id": group_id,
         })
         importance_list.append(fold_importance)
         
     print("\n[3/4] Running Custom Metric Evaluation...")
-    oof_preds_df = pd.concat(all_oof_preds, axis=1).fillna(0)
-    oof_trues_df = pd.concat(all_oof_trues, axis=1).fillna(0)
-    
-    metrics = calculate_competition_metric(oof_trues_df, oof_preds_df)
+    oof_predictions = pd.concat(oof_frames, ignore_index=True)
+    fold_metrics_df = pd.DataFrame(fold_metric_rows)
+    metrics, group_metrics = calculate_oof_metrics(oof_predictions)
     print(f"Total Score     : {metrics['total_score']:.5f}")
     print(f"1 - NMAE         : {metrics['one_minus_nmae']:.5f}")
     print(f"FICR             : {metrics['ficr']:.5f}")
     
-    with open(f"{output_root}/val_results.txt", "w") as f:
-        f.write(yaml.dump(metrics))
+    oof_predictions.to_csv(
+        Path(output_root) / "oof_predictions.csv", index=False, encoding="utf-8-sig"
+    )
+    fold_metrics_df.to_csv(
+        Path(output_root) / "fold_group_metrics.csv", index=False, encoding="utf-8-sig"
+    )
+    best_iterations_df = fold_metrics_df[
+        ["fold", "group_id", "target", "best_iteration"]
+    ].copy()
+    best_iterations_df.to_csv(
+        Path(output_root) / "best_iterations.csv", index=False, encoding="utf-8-sig"
+    )
+    validation_results = {
+        **metrics,
+        "group_metrics": group_metrics,
+        "fold_group_metrics": fold_metric_rows,
+    }
+    with open(Path(output_root) / "val_results.txt", "w", encoding="utf-8") as f:
+        f.write(yaml.safe_dump(validation_results, allow_unicode=True, sort_keys=False))
         
     # 모든 폴드의 중요도를 평균내어 어떤 변수가 노이즈이고 하위 순위인지 리스트 파일로 저장
-    full_importance_df = pd.concat(importance_list).groupby("feature").mean().sort_values(by="importance", ascending=False)
+    full_importance_df = (
+        pd.concat(importance_list)
+        .groupby("feature")[["importance"]]
+        .mean()
+        .sort_values(by="importance", ascending=False)
+    )
     full_importance_df.to_csv(f"{output_root}/feature_importances_report.csv", encoding="utf-8-sig")
     print(f"Saved feature importances report to: {output_root}/feature_importances_report.csv")
         
@@ -296,12 +454,7 @@ def main():
         y_full_train = full_train_df[group_key]
         X_test = group_test_features.drop(columns=[time_col_name], errors="ignore")
         
-        blocks_config = {
-            "wind_physics": config["features"].get("power_curve_features", False),
-            "thermodynamic": config["features"].get("thermodynamic", False),
-            "forecast_disagreement": config["features"].get("weather_summary", False),
-            "advanced_meteorology": config["features"].get("advanced_meteorology", True),
-        }
+        blocks_config = get_feature_blocks_config(config)
         
         pipeline = FeatureBlockPipeline(
             blocks=blocks_config, 
@@ -333,6 +486,17 @@ def main():
             model_params['iterations'] = model_params.pop('n_estimators')
         if 'iterations' not in model_params:
             model_params['iterations'] = 2000
+        iteration_multiplier = float(config.get("final_iteration_multiplier", 1.0))
+        selected_iterations = max(
+            1,
+            int(round(np.median(best_iterations_by_group[group_id]) * iteration_multiplier)),
+        )
+        model_params['iterations'] = selected_iterations
+        print(
+            f"Using {selected_iterations} final iterations for group {group_id} "
+            f"from fold values {best_iterations_by_group[group_id]} "
+            f"(multiplier={iteration_multiplier})."
+        )
             
         monotonic_features = config.get('monotonic_features', {})
         if monotonic_features:
