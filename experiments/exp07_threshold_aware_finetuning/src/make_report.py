@@ -83,6 +83,64 @@ def _history_table(output_root: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def write_freeze_policy_check(output_root: Path) -> Path:
+    """Extract the actual freeze manifests embedded in trained checkpoints."""
+    import torch
+
+    checkpoint_root = output_root / "checkpoints"
+    patterns = {
+        "exp03_head_only": "exp03_fixed_006_lambda_005_*.pt",
+        "raw_head_only": "raw_annealed_015_004_lambda_005_*.pt",
+        "exp03_last_block": "exp03_last_block_fixed_006_lambda_005_*.pt",
+        "raw_last_block": "raw_last_block_annealed_015_004_lambda_005_*.pt",
+    }
+    manifests = {}
+    for name, pattern in patterns.items():
+        paths = sorted(checkpoint_root.glob(pattern))
+        if not paths:
+            raise FileNotFoundError(f"freeze manifest checkpoint missing: {pattern}")
+        payload = torch.load(paths[0], map_location="cpu", weights_only=False)
+        manifest = payload.get("freeze_manifest")
+        if not manifest:
+            raise ValueError(f"checkpoint has no freeze manifest: {paths[0]}")
+        manifests[name] = {"checkpoint": str(paths[0]), **manifest}
+    validations = {
+        "exp03_head_only_power_head_only": all(
+            name.startswith("power_heads.")
+            for name in manifests["exp03_head_only"]["trainable_names"]
+        ),
+        "raw_head_only_power_head_only": all(
+            name.startswith("power_head.")
+            for name in manifests["raw_head_only"]["trainable_names"]
+        ),
+        "exp03_last_block_present": any(
+            name.startswith("temporal.3.")
+            for name in manifests["exp03_last_block"]["trainable_names"]
+        ),
+        "raw_last_block_present": any(
+            name.startswith("temporal.temporal.3.")
+            for name in manifests["raw_last_block"]["trainable_names"]
+        ),
+        "auxiliary_heads_frozen": all(
+            not any("aux" in parameter.lower() for parameter in manifest["trainable_names"])
+            for manifest in manifests.values()
+        ),
+        "full_encoder_never_unfrozen": all(
+            manifest["trainable_parameters"] < manifest["total_parameters"]
+            for manifest in manifests.values()
+        ),
+    }
+    result = {
+        "passed": all(validations.values()),
+        "validations": validations,
+        "manifests": manifests,
+    }
+    path = output_root / "checks/freeze_policy.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    return path
+
+
 def render_figures(output_root: Path) -> list[Path]:
     """Create the eight figures required by the Exp07 experiment contract."""
     import matplotlib
@@ -460,6 +518,7 @@ def build_final_artifacts(
     run_id: str = "20260721_121800",
     tests_passed: int = 109,
 ) -> dict:
+    freeze_policy = write_freeze_policy_check(output_root)
     figures = render_figures(output_root)
     output_report = write_report(output_root, tests_passed=tests_passed)
     tracked_report = None
@@ -468,6 +527,7 @@ def build_final_artifacts(
     manifest = write_run_manifest(output_root, run_id=run_id, tests_passed=tests_passed)
     return {
         "figures": [str(path) for path in figures],
+        "freeze_policy": str(freeze_policy),
         "output_report": str(output_report),
         "tracked_report": None if tracked_report is None else str(tracked_report),
         "run_manifest": str(manifest),
