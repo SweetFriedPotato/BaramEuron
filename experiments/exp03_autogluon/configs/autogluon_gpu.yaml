@@ -1,0 +1,45 @@
+seed: 42
+
+data:
+  root: open
+  train_dir: open/train
+  test_dir: open/test
+  metadata: open/info.xlsx
+  sample_submission: open/sample_submission.csv
+
+features:
+  time: true
+  weather_summary: true
+  nearest_grid: true
+  distance_weighted_grid: true
+  wind_physics: true
+  thermodynamic: true
+  forecast_disagreement: true
+  advanced_meteorology: true
+
+wind_physics:
+  alpha_quantiles: [0.01, 0.99]
+  minimum_wind_speed: 0.1
+  bins_mps: [3, 7, 11, 20]
+
+feature_drop_list: experiments/exp03_autogluon/configs/dropped_features_list.txt
+
+model:
+  presets: medium_quality
+  eval_metric: mean_absolute_error
+  time_limit: 3600
+  num_gpus: 1
+  verbosity: 2
+  feature_importance_rows: 5000
+  fit_args: {}
+
+postprocess:
+  lower_clip: 0
+  upper_clip:
+    enabled: false
+    kpx_group_1: 21600
+    kpx_group_2: 21600
+    kpx_group_3: 21000
+
+cache_dir: baseline/cache
+output_root: experiments/exp03_autogluon/outputs/gpu
