@@ -636,7 +636,7 @@ def finalize_nested(output_root: Path) -> dict:
     from .evaluate import (
         acceptance, boundary_region_scores, summarize_candidate, threshold_transitions, rescue_gain,
     )
-    from .make_report import write_report
+    from .make_report import build_final_artifacts
 
     component_selection = json.loads((output_root / "component_selection.json").read_text())
     reference = load_oof_contract()
@@ -766,7 +766,7 @@ def finalize_nested(output_root: Path) -> dict:
     }
     _write_json(output_root / "final_selection.json", final_selection)
     pd.DataFrame([candidate]).to_csv(output_root / "metrics/final_candidate_scores.csv", index=False)
-    write_report(output_root)
+    build_final_artifacts(output_root)
     return final_selection
 
 
