@@ -8,10 +8,11 @@ and delta `0.000000000000`. Full fine-tuning and submission
 generation were therefore skipped by contract.
 
 - Branch: `exp/07-threshold-aware-finetune`
-- Evidence commit: `a06110b`
+- Evidence commit: `f770e8a`
 - Tests: `109 passed`
 - A100 Drive run: `/content/drive/MyDrive/Baram/runs/exp07_threshold_aware_finetuning/20260721_121800`
 - Public Score used for selection: no
+- Public context only: Exp04 `0.634005715`
 - Public submission priority: none; Exp04 remains champion
 
 ## Reference contract

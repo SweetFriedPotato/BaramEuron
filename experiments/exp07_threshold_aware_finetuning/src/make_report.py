@@ -14,6 +14,7 @@ import pandas as pd
 
 EXPERIMENT_DIR = Path(__file__).resolve().parents[1]
 EXP04_SCORE = 0.6474395993905896
+EXP04_PUBLIC_SCORE = 0.634005715
 ACCEPTANCE_SCORE = 0.649440
 DRIVE_RUN = (
     "/content/drive/MyDrive/Baram/runs/exp07_threshold_aware_finetuning/"
@@ -376,6 +377,7 @@ generation were therefore skipped by contract.
 - Tests: `{tests_passed} passed`
 - A100 Drive run: `{DRIVE_RUN}`
 - Public Score used for selection: no
+- Public context only: Exp04 `{EXP04_PUBLIC_SCORE:.9f}`
 - Public submission priority: none; Exp04 remains champion
 
 ## Reference contract
