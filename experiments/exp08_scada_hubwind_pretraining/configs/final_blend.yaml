@@ -1,0 +1,12 @@
+experiment_id: exp08_final_blend
+components: [exp03_original, exp04_raw_original, exp08_stage2_best]
+maximum_components: 3
+constraints:
+  nonnegative: true
+  sum_to_one: true
+search:
+  coarse_step: 0.025
+  fine_step: 0.005
+  fine_radius: 0.025
+selection_metric: rolling_oof_official_score
+public_used_for_selection: false

@@ -1,0 +1,32 @@
+experiment_id: stage1_hubwind_distribution
+use_geo: true
+use_thermo: true
+use_engineered: true
+gated_fusion: true
+stage1:
+  target_count: 4
+  targets: [hub_ws_median, hub_ws_mean, hub_ws_std, hub_ws_iqr]
+  initialize_from_auxiliary: false
+  loss_weights: [1.0, 0.5, 0.25, 0.25]
+model:
+  token_dim: 64
+  attention_heads: 4
+  attention_dropout: 0.10
+  hidden_channels: 128
+  kernel_size: 3
+  dilations: [1, 2, 4, 8]
+  temporal_dropout: 0.15
+  non_causal: true
+training:
+  seeds: [42, 52, 62]
+  batch_size: 16
+  max_epochs: 80
+  smoke_epochs: 3
+  patience: 10
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+  amp: true
+preprocessing:
+  lower_quantile: 0.001
+  upper_quantile: 0.999

@@ -1,0 +1,34 @@
+experiment_id: stage2_joint_finetune
+use_geo: true
+use_thermo: true
+use_engineered: true
+gated_fusion: true
+lambda_ficr: 0.20
+temperature: 0.005
+retention_weight: 0.05
+stage2:
+  variant: joint_finetune
+  gate: run_only_if_explicit_or_distribution_improves_exp04
+  encoder_learning_rate: 0.00001
+  head_learning_rate: 0.0001
+  retain_hub_head: true
+  full_spatial_unfreeze: false
+model:
+  token_dim: 64
+  attention_heads: 4
+  attention_dropout: 0.10
+  hidden_channels: 128
+  kernel_size: 3
+  dilations: [1, 2, 4, 8]
+  temporal_dropout: 0.15
+  non_causal: true
+training:
+  seeds: [42, 52, 62]
+  batch_size: 16
+  max_epochs: 100
+  smoke_epochs: 3
+  patience: 12
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+  amp: true

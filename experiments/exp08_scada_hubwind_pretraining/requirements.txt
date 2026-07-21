@@ -1,0 +1,3 @@
+-r ../exp04_raw_grid_spatiotemporal/requirements.txt
+matplotlib>=3.8
+PyYAML>=6.0
