@@ -15,7 +15,7 @@ features:
   wind_physics: true
   thermodynamic: true
   forecast_disagreement: true
-  advanced_meteorology: true
+  advanced_meteorology: false
 
 model:
   name: catboost
