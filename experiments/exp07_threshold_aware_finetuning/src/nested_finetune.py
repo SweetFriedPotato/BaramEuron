@@ -218,6 +218,39 @@ def _sync_quarter(
             shutil.copy2(source, destination / source.name)
 
 
+def _restore_completed_quarter(
+    *,
+    drive_run: Path | None,
+    model_id: str,
+    candidate_id: str,
+    seed: int,
+    quarter: str,
+    checkpoint: Path,
+    quarter_path: Path,
+    metric_path: Path,
+    configured_max_epochs: int,
+) -> tuple[pd.DataFrame, dict] | None:
+    """Resume only checkpoints produced with the same full epoch budget."""
+    local_files = [checkpoint, checkpoint.with_suffix(".history.json"), metric_path, quarter_path]
+    if not all(path.exists() for path in local_files) and drive_run is not None:
+        remote = drive_run / "nested" / model_id / candidate_id / str(seed) / quarter
+        remote_by_name = {path.name: path for path in remote.iterdir()} if remote.is_dir() else {}
+        for destination in local_files:
+            source = remote_by_name.get(destination.name)
+            if source is not None:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+    if not all(path.exists() for path in local_files):
+        return None
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    observed = int(payload.get("config", {}).get("training", {}).get("max_epochs", -1))
+    if observed != int(configured_max_epochs):
+        return None
+    frame = pd.read_csv(quarter_path, parse_dates=[TIME_COL])
+    record = json.loads(metric_path.read_text(encoding="utf-8"))
+    return frame, record
+
+
 def _source_inner_score_tcn(model, x, y, mask, batch_size: int) -> dict:
     from experiments.exp02_daily_tcn_scada_aux.src.trainer import predict
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -278,6 +311,28 @@ def run_nested_model(
             })
             continue
         inner_quarter = ROLLING_QUARTERS[ROLLING_QUARTERS.index(quarter) - 1]
+        run_config = copy.deepcopy(config)
+        if smoke_epochs is not None:
+            run_config["training"]["max_epochs"] = int(smoke_epochs)
+            run_config["training"]["patience"] = int(smoke_epochs)
+        checkpoint = output_root / "checkpoints" / (
+            f"{model_id}_{candidate_id}_{quarter}_seed_{seed}.pt"
+        )
+        quarter_path = output_root / "predictions" / (
+            f"nested_{model_id}_{candidate_id}_{quarter}_seed_{seed}.csv"
+        )
+        metric_path = checkpoint.with_suffix(".metrics.json")
+        resumed = _restore_completed_quarter(
+            drive_run=drive_run, model_id=model_id, candidate_id=candidate_id,
+            seed=seed, quarter=quarter, checkpoint=checkpoint,
+            quarter_path=quarter_path, metric_path=metric_path,
+            configured_max_epochs=int(run_config["training"]["max_epochs"]),
+        )
+        if resumed is not None:
+            outer, record = resumed
+            all_parts.append(outer); records.append(record)
+            print(f"resume {model_id} {candidate_id} seed={seed} {quarter}", flush=True)
+            continue
         prepared = _prepare_expanding_quarter(
             quarter, baseline_cfg, train_features, labels, scada
         )
@@ -288,13 +343,6 @@ def run_nested_model(
         )
         source = rolling_checkpoint_path(model_id, quarter)
         validate_checkpoint(model_id, quarter)
-        run_config = copy.deepcopy(config)
-        if smoke_epochs is not None:
-            run_config["training"]["max_epochs"] = int(smoke_epochs)
-            run_config["training"]["patience"] = int(smoke_epochs)
-        checkpoint = output_root / "checkpoints" / (
-            f"{model_id}_{candidate_id}_{quarter}_seed_{seed}.pt"
-        )
         if model_id == "exp03":
             model, _ = load_tcn_checkpoint(source)
             batch_size = int(run_config["training"].get("batch_size", 32))
@@ -355,13 +403,11 @@ def run_nested_model(
             "device": result.device,
             "source_checkpoint": result.source_checkpoint,
             "source_checkpoint_sha256": result.source_checkpoint_sha256,
+            "configured_max_epochs": int(run_config["training"]["max_epochs"]),
         }
         records.append(record)
-        quarter_path = output_root / "predictions" / (
-            f"nested_{model_id}_{candidate_id}_{quarter}_seed_{seed}.csv"
-        )
         outer.to_csv(quarter_path, index=False)
-        metric_path = checkpoint.with_suffix(".metrics.json"); _write_json(metric_path, record)
+        _write_json(metric_path, record)
         _sync_quarter(
             drive_run, model_id, candidate_id, seed, quarter,
             [checkpoint, checkpoint.with_suffix(".history.json"), metric_path, quarter_path],
