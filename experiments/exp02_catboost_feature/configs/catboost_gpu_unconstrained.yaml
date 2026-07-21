@@ -10,12 +10,12 @@ data:
 features:
   time: true
   weather_summary: true
-  nearest_grid: true
+  nearest_grid: false
   distance_weighted_grid: true
   wind_physics: true
   thermodynamic: true
   forecast_disagreement: true
-  advanced_meteorology: false
+  advanced_meteorology: true
 
 model:
   name: catboost
