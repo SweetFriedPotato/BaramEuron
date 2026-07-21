@@ -10,7 +10,7 @@ data:
 features:
   time: true
   weather_summary: true
-  nearest_grid: false
+  nearest_grid: true
   distance_weighted_grid: true
   wind_physics: true
   thermodynamic: true
