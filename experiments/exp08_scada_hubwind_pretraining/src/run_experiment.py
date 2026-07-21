@@ -361,10 +361,12 @@ def phase_stage1(
             metric_rows.append({"model_id": selected, "seed": seed, "group_id": group_id,
                                 "target": f"hub_ws_{target_name}", "samples": int(valid.sum()),
                                 "mae": float((pred-true).abs().mean()), "rmse": float(np.sqrt(((pred-true)**2).mean())),
-                                "pearson": float(pred.corr(true)), "spearman": float(pred.rank().corr(true.rank()))})
+                                "pearson": float(pred.corr(true)), "spearman": float(pred.rank().corr(true.rank())),
+                                "predicted_mean": float(pred.mean()), "observed_mean": float(true.mean()),
+                                "calibration_ratio": float(pred.mean() / max(true.mean(), 1e-8))})
     _upsert(output_root / "metrics/stage1_group_metrics.csv", pd.DataFrame(metric_rows),
             ["model_id", "seed", "group_id", "target"])
-    quarter_rows, wind_rows, lead_rows = [], [], []
+    quarter_rows, month_rows, wind_rows, lead_rows = [], [], [], []
     for quarter, part in selected_points.groupby("quarter", sort=True):
         valid = part["target_mask_median"].astype(bool)
         group_mae = (part.loc[valid, "predicted_hub_ws_median"] - part.loc[valid, "scada_hub_ws_median"]).abs().groupby(part.loc[valid, "group_id"]).mean()
@@ -372,6 +374,22 @@ def phase_stage1(
                              "group_balanced_mae": float(group_mae.mean()),
                              "pearson": float(part.loc[valid, "predicted_hub_ws_median"].corr(part.loc[valid, "scada_hub_ws_median"]))})
     median_points = selected_points.loc[selected_points["target_mask_median"].astype(bool)].copy()
+    selected_points = selected_points.copy()
+    selected_points["month"] = pd.to_datetime(selected_points[TIME_COL]).dt.month
+    for (group_id, month), part in selected_points.groupby(["group_id", "month"], sort=True):
+        for target_name in ("median", "mean", "std", "iqr"):
+            valid = part[f"target_mask_{target_name}"].astype(bool)
+            if not valid.any():
+                continue
+            true = part.loc[valid, f"scada_hub_ws_{target_name}"]
+            pred = part.loc[valid, f"predicted_hub_ws_{target_name}"]
+            month_rows.append({
+                "model_id": selected, "seed": seed, "group_id": group_id,
+                "target": f"hub_ws_{target_name}", "month": month,
+                "samples": int(valid.sum()), "mae": float((pred - true).abs().mean()),
+                "rmse": float(np.sqrt(((pred - true) ** 2).mean())),
+                "pearson": float(pred.corr(true)),
+            })
     median_points["wind_regime"] = pd.cut(median_points["scada_hub_ws_median"], [-np.inf, 4.0, 10.0, np.inf], labels=["low", "mid", "high"])
     for (group_id, regime), part in median_points.groupby(["group_id", "wind_regime"], observed=True, sort=True):
         wind_rows.append({"model_id": selected, "seed": seed, "group_id": group_id, "wind_regime": regime,
@@ -380,6 +398,7 @@ def phase_stage1(
         lead_rows.append({"model_id": selected, "seed": seed, "group_id": group_id, "lead_hour": lead,
                           "samples": len(part), "mae": float((part["predicted_hub_ws_median"]-part["scada_hub_ws_median"]).abs().mean())})
     _upsert(output_root / "metrics/stage1_quarter_metrics.csv", pd.DataFrame(quarter_rows), ["model_id", "seed", "quarter"])
+    _upsert(output_root / "metrics/stage1_month_metrics.csv", pd.DataFrame(month_rows), ["model_id", "seed", "group_id", "target", "month"])
     _upsert(output_root / "metrics/stage1_wind_regime_metrics.csv", pd.DataFrame(wind_rows), ["model_id", "seed", "group_id", "wind_regime"])
     _upsert(output_root / "metrics/stage1_lead_time_metrics.csv", pd.DataFrame(lead_rows), ["model_id", "seed", "group_id", "lead_hour"])
     return {"variants": variants, "selection": json.loads((output_root / "stage1_selection.json").read_text())}
@@ -606,9 +625,12 @@ def phase_finalize(output_root: Path) -> dict:
     for model_id in selections["top_two"]:
         candidates.append(_seed_ensemble(stage2, model_id))
     candidate_scores = []
+    group_score_frames = []
     for candidate in candidates:
         summary, groups = score_available_groups(candidate)
-        candidate_scores.append({"model_id": candidate["model_id"].iloc[0], **summary})
+        model_name = candidate["model_id"].iloc[0]
+        candidate_scores.append({"model_id": model_name, **summary})
+        group_score_frames.append(groups.assign(model_id=model_name))
     pd.DataFrame(candidate_scores).to_csv(output_root / "metrics/final_candidate_scores.csv", index=False)
     best_model = max(candidate_scores, key=lambda row: row["total_score"])["model_id"]
     exp08 = next(frame for frame in candidates if frame["model_id"].iloc[0] == best_model)
@@ -635,13 +657,17 @@ def phase_finalize(output_root: Path) -> dict:
         for quarter, part in frame.groupby("quarter"):
             quarter_rows.append({"model_id": model_name, "quarter": quarter, **score_available_groups(part)[0]})
     pd.DataFrame(quarter_rows).to_csv(output_root / "metrics/nested_quarter_scores.csv", index=False)
-    _, group_scores = score_available_groups(blend); group_scores.insert(0, "model_id", "final_blend")
-    group_scores.to_csv(output_root / "metrics/group_scores.csv", index=False)
+    for model_name, frame in (("exp04", reference), ("final_blend", blend)):
+        _, groups = score_available_groups(frame)
+        group_score_frames.append(groups.assign(model_id=model_name))
+    pd.concat(group_score_frames, ignore_index=True).to_csv(output_root / "metrics/group_scores.csv", index=False)
     residual = residual_correlations(reference, exp08); residual.insert(0, "model_id", best_model)
     residual.to_csv(output_root / "metrics/residual_correlations.csv", index=False)
     slices = sliced_scores(pd.concat([reference.assign(model_id="exp04"), exp08, blend.assign(model_id="final_blend")], ignore_index=True))
     slices["january"].to_csv(output_root / "metrics/january_scores.csv", index=False)
     slices["high_wind"].to_csv(output_root / "metrics/high_wind_scores.csv", index=False)
+    pd.DataFrame({"model_id": best_model, "seed": sorted(stage2.loc[stage2["model_id"].eq(best_model), "seed"].unique()),
+                  "total_score": seed_scores}).to_csv(output_root / "metrics/seed_scores.csv", index=False)
     write_json(output_root / "final_selection.json", {
         "best_exp08_model": best_model,
         "blend": {column: float(search.iloc[0][column]) for column in search if column.startswith("weight_")},
@@ -676,7 +702,7 @@ def main() -> None:
     if args.phase in {"finalize", "all"}: result["finalize"] = phase_finalize(args.output_root)
     if args.phase in {"report", "all"}:
         render_figures(args.output_root)
-        write_manifest(args.output_root, args.run_id, 123, None if args.drive_run is None else str(args.drive_run))
+        write_manifest(args.output_root, args.run_id, 124, None if args.drive_run is None else str(args.drive_run))
         write_report(args.output_root, EXPERIMENT_DIR / "report.md"); write_report(args.output_root)
     write_json(args.output_root / f"phase_{args.phase}.json", result)
     if args.drive_run is not None:

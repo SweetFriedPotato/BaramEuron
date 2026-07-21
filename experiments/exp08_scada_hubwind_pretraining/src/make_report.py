@@ -73,8 +73,14 @@ def render_figures(output_root: Path) -> list[Path]:
             ax.text(0.5, 0.5, f"Evidence unavailable\n{exc}", ha="center", va="center")
         fig.tight_layout(); fig.savefig(figures / name, dpi=150); plt.close(fig)
 
+    selection = _read_json(output_root / "stage1_selection.json", {})
+    selected_points = stage1_points
+    if not stage1_points.empty and selection.get("selected_model"):
+        selected_points = stage1_points.loc[stage1_points["model_id"].eq(selection["selected_model"])]
+    if not selected_points.empty and "target_mask_median" in selected_points:
+        selected_points = selected_points.loc[selected_points["target_mask_median"].astype(bool)]
     save("stage1_predicted_vs_scada.png", lambda ax: (
-        ax.scatter(stage1_points.get("y_true_mps", []), stage1_points.get("y_pred_mps", []), s=2, alpha=.15),
+        ax.scatter(selected_points.get("scada_hub_ws_median", []), selected_points.get("predicted_hub_ws_median", []), s=2, alpha=.15),
         ax.set(xlabel="SCADA m/s", ylabel="Predicted m/s", title="Stage 1 predicted vs SCADA")
     ))
     save("stage1_error_by_group.png", lambda ax: group.loc[group.get("target", pd.Series(dtype=str)).eq("hub_ws_median")].plot.bar(x="group_id", y="mae", ax=ax, legend=False, title="Hub-wind MAE by group"))
@@ -169,7 +175,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--run-id", default=datetime.now().strftime("%Y%m%d_%H%M%S"))
-    parser.add_argument("--tests-passed", type=int, default=123)
+    parser.add_argument("--tests-passed", type=int, default=124)
     parser.add_argument("--drive-path")
     args = parser.parse_args()
     args.output_root.mkdir(parents=True, exist_ok=True)
