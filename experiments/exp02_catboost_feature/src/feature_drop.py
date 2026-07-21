@@ -87,4 +87,4 @@ if __name__ == "__main__":
         REPORT_FILE = "feature_importances_report.csv"
         
     # 함수 실행 -> 유지할 피처 이름 리스트 반환
-    features_to_keep = drop_low_importance_features(REPORT_FILE, threshold=0.2)
+    features_to_keep = drop_low_importance_features(REPORT_FILE, threshold=0.05)
