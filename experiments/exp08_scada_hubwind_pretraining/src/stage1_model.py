@@ -29,6 +29,8 @@ class HubWindDistributionModel(RawGridSpatiotemporalModel):
 
     def forward(self, *args, **kwargs):
         distribution, auxiliary, diagnostics = super().forward(*args, **kwargs)
+        if self.target_count == 1 and distribution.ndim == 3:
+            distribution = distribution.unsqueeze(-1)
         if distribution.ndim != 4 or distribution.shape[2] != 3:
             raise ValueError("Stage-1 output must be [B,T,3,K]")
         return distribution, auxiliary, diagnostics

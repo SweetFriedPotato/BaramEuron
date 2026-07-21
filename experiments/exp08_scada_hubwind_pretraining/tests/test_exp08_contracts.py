@@ -171,6 +171,14 @@ def test_11_stage1_and_stage2_tensor_schemas_match():
     distribution, _, _ = stage1(torch.from_numpy(inputs.ldaps), torch.from_numpy(inputs.gfs),
                                  torch.from_numpy(inputs.engineered_common), torch.from_numpy(inputs.engineered_group))
     assert distribution.shape == (2, 24, 3, 4)
+    for target_count in (1, 2):
+        config = _config(1); config["stage1"]["target_count"] = target_count
+        ablation = build_stage1_model(config, 3, 4, static, static, 5, (4, 4, 4))
+        output, _, _ = ablation(
+            torch.from_numpy(inputs.ldaps), torch.from_numpy(inputs.gfs),
+            torch.from_numpy(inputs.engineered_common), torch.from_numpy(inputs.engineered_group),
+        )
+        assert output.shape == (2, 24, 3, target_count)
     scaler = HubWindTargetScaler().fit(np.ones(distribution.shape), np.ones(distribution.shape, dtype=bool))
     physical = scaler.inverse_transform(distribution.detach().numpy())
     hub = FoldHubFeatureImputer().fit(build_stage2_hub_features(physical, np.ones((2, 24)))).transform(
