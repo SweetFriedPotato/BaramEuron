@@ -7,6 +7,10 @@ tracked feature-drop 목록을 사용하고 모델만 AutoGluon `TabularPredicto
 
 ```powershell
 pip install -r experiments/exp03_autogluon/requirements.txt
+
+.\colab\windows\Invoke-Colab.ps1 -Distro $Distro `
+  install -s $Session `
+  -r experiments/exp03_autogluon/requirements.txt
 ```
 
 ## Validation only
@@ -14,6 +18,21 @@ pip install -r experiments/exp03_autogluon/requirements.txt
 ```powershell
 python -m experiments.exp03_autogluon.src.run_experiment `
   --config experiments/exp03_autogluon/configs/autogluon_gpu.yaml `
+  --no-finalize
+
+
+$RunId = "$(Get-Date -Format yyyyMMdd_HHmmss)_autogluon_val"
+$Output = "experiments/exp03_autogluon/outputs/gpu/$RunId"
+
+.\colab\windows\Invoke-ColabPython.ps1 -Distro $Distro -Session $Session `
+  -ScriptPath .\colab\run_and_sync.py `
+  --source $Output `
+  --experiment exp03_autogluon `
+  --run-id $RunId -- `
+  python -m experiments.exp03_autogluon.src.run_experiment `
+  --config experiments/exp03_autogluon/configs/autogluon_gpu.yaml `
+  --output-root $Output `
+  --time-limit 600 `
   --no-finalize
 ```
 
