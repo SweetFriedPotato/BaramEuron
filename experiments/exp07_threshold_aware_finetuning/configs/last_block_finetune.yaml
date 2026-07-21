@@ -1,0 +1,19 @@
+freeze_policy: last_block
+tau_schedule: cosine
+tau_start: 0.015
+tau_end: 0.004
+sigma: 0.006
+lambda_boundary: 0.05
+soft_ficr_weight: 0.20
+aux_weight_candidates: [0.0, 0.02]
+training:
+  batch_size_exp03: 32
+  batch_size_raw: 16
+  head_learning_rate: 0.00005
+  block_learning_rate: 0.00001
+  weight_decay: 0.00001
+  max_epochs: 15
+  patience: 4
+  gradient_clip: 0.5
+  amp: true
+

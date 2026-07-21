@@ -1,0 +1,2 @@
+-r ../exp04_raw_grid_spatiotemporal/requirements.txt
+

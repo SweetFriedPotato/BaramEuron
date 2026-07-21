@@ -1,0 +1,13 @@
+raw_weight_min: 0.0
+raw_weight_max: 0.8
+raw_weight_step: 0.025
+acceptance:
+  minimum_score: 0.649440
+  minimum_delta: 0.002
+  minimum_improved_quarters: 6
+  maximum_worst_quarter_degradation: 0.002
+  maximum_one_minus_nmae_degradation: 0.0005
+  require_ficr_improvement: true
+  require_group3_maintenance: true
+  require_positive_rescue_gain: true
+  require_seed_mean_improvement: true

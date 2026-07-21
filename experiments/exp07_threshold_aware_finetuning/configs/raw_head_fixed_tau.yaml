@@ -1,0 +1,17 @@
+model_id: raw
+freeze_policy: head_only
+tau_schedule: fixed
+tau_start: 0.006
+tau_end: 0.006
+sigma: 0.006
+lambda_boundary: 0.05
+soft_ficr_weight: 0.20
+training:
+  batch_size: 16
+  learning_rate: 0.0001
+  weight_decay: 0.00001
+  max_epochs: 20
+  patience: 5
+  gradient_clip: 0.5
+  amp: true
+
