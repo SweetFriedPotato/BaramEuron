@@ -32,7 +32,13 @@ from experiments.exp04_raw_grid_spatiotemporal.src.run_experiment import (
 )
 
 from .blend import search_convex_blend
-from .evaluate import acceptance, reproduce_exp04_reference, stage1_metric_tables, summarize_power_candidate
+from .evaluate import (
+    EXP04_ROLLING_SCORE,
+    acceptance,
+    reproduce_exp04_reference,
+    stage1_metric_tables,
+    summarize_power_candidate,
+)
 from .make_report import render_figures, write_manifest, write_report
 from .scada_hourly_targets import (
     HubWindTargetScaler,
@@ -49,7 +55,7 @@ from .stage1_model import build_stage1_model
 from .stage2_dataset import FoldHubFeatureImputer, build_stage2_hub_features, write_stage2_feature_schema
 from .stage2_model import build_stage2_model, feature_indices_for_variant
 from .trainer import train_stage1, train_stage2
-from .transfer import load_matching_encoder_weights, load_stage1_from_exp04
+from .transfer import load_matching_encoder_weights, load_stage1_from_exp04, load_stage1_retention_head
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -69,7 +75,9 @@ STAGE2_VARIANTS = {
     "s2_b_pretrained": ("stage2_pretrained_encoder.yaml", "pretrained_encoder"),
     "s2_c_explicit": ("stage2_explicit_hubwind.yaml", "explicit_hubwind"),
     "s2_d_distribution": ("stage2_explicit_hubwind.yaml", "distribution_hubwind"),
+    "s2_e_joint": ("stage2_joint_finetune.yaml", "joint_finetune"),
 }
+INITIAL_STAGE2_VARIANTS = ("s2_b_pretrained", "s2_c_explicit", "s2_d_distribution")
 
 
 def write_json(path: Path, value) -> None:
@@ -464,7 +472,13 @@ def run_stage2_quarter(
     stage1_checkpoint = output_root / f"checkpoints/stage1/{stage1_model}/{seed}/{quarter}.pt"
     if not stage1_checkpoint.exists(): stage1_checkpoint = output_root / f"checkpoints/stage1/{stage1_model}/42/{quarter}.pt"
     stage1_init = load_matching_encoder_weights(model, stage1_checkpoint)
-    write_json(output_root / f"checks/transfer/stage2_{model_id}_{quarter}.json", {"exp04": exp04_init, "stage1": stage1_init})
+    retention_init = None
+    if variant == "joint_finetune":
+        retention_init = load_stage1_retention_head(model, stage1_checkpoint)
+    write_json(
+        output_root / f"checks/transfer/stage2_{model_id}_{quarter}.json",
+        {"exp04": exp04_init, "stage1": stage1_init, "retention_head": retention_init},
+    )
     if smoke_epochs is not None:
         ti = np.arange(max(0, len(data.raw.train_inputs)-16), len(data.raw.train_inputs)); vi = np.arange(min(8, len(data.raw.valid_inputs)))
         train_inputs, valid_inputs = data.raw.train_inputs.subset(ti), data.raw.valid_inputs.subset(vi)
@@ -496,7 +510,7 @@ def phase_stage2(
     if model_id:
         variants = [model_id]
     elif seed == 42:
-        variants = list(STAGE2_VARIANTS)
+        variants = list(INITIAL_STAGE2_VARIANTS)
     else:
         variants = list(json.loads((output_root / "stage2_selection.json").read_text())["top_two"])
     context = DataContext(output_root); frames = []
@@ -514,11 +528,50 @@ def phase_stage2(
         summary, _ = score_available_groups(part)
         rows.append({"model_id": variant, "seed": candidate_seed, **summary})
     scores = pd.DataFrame(rows).sort_values("total_score", ascending=False)
+    joint_executed = "s2_e_joint" in variants
+    if seed == 42 and model_id is None:
+        explicit_scores = scores.loc[
+            scores["seed"].eq(42)
+            & scores["model_id"].isin(["s2_c_explicit", "s2_d_distribution"]),
+            "total_score",
+        ]
+        if not explicit_scores.empty and float(explicit_scores.max()) > EXP04_ROLLING_SCORE:
+            joint_executed = True
+            joint_frames = []
+            for quarter in ROLLING_QUARTERS:
+                _, path = run_stage2_quarter(
+                    context, "s2_e_joint", seed, quarter, stage1_model,
+                    output_root, exp04_root, drive_run,
+                )
+                data = np.load(path)
+                frame = prediction_frame(
+                    data["timestamps"], data["target"], data["mask"], data["prediction"],
+                    "s2_e_joint", quarter, seed, data["validation_wind"],
+                    float(data["high_wind_threshold"]),
+                )
+                frame["quarter"] = quarter
+                joint_frames.append(frame)
+            variants.append("s2_e_joint")
+            combined = _upsert(
+                output_root / "predictions/stage2_oof_predictions.csv",
+                pd.concat(joint_frames, ignore_index=True),
+                ["model_id", "seed", "quarter", TIME_COL, "target"],
+            )
+            rows = []
+            for (variant, candidate_seed), part in combined.groupby(["model_id", "seed"]):
+                summary, _ = score_available_groups(part)
+                rows.append({"model_id": variant, "seed": candidate_seed, **summary})
+            scores = pd.DataFrame(rows).sort_values("total_score", ascending=False)
     scores.to_csv(output_root / "metrics/stage2_candidate_scores.csv", index=False)
     if seed == 42:
         top_two = scores.loc[scores["seed"].eq(42)].head(2)["model_id"].tolist()
         write_json(output_root / "stage2_selection.json", {"selected_model": top_two[0], "top_two": top_two})
-    return {"variants": variants, "scores": scores.to_dict("records")}
+    return {
+        "variants": variants,
+        "joint_executed": joint_executed,
+        "joint_gate": "C/D seed-42 rolling score must exceed Exp04",
+        "scores": scores.to_dict("records"),
+    }
 
 
 def phase_smoke(output_root: Path, exp04_root: Path, drive_run: Path | None) -> dict:

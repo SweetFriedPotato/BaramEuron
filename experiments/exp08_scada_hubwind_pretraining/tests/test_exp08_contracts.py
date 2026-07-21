@@ -48,6 +48,7 @@ from experiments.exp08_scada_hubwind_pretraining.src.stage2_dataset import (
     build_stage2_hub_features,
 )
 from experiments.exp08_scada_hubwind_pretraining.src.stage2_model import build_stage2_model
+from experiments.exp08_scada_hubwind_pretraining.src.transfer import load_stage1_retention_head
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -225,3 +226,18 @@ def test_14_submission_contract_checks_rows_keys_values_dtypes_and_duplicates():
     broken = output.copy(); broken.loc[0, TARGETS[0]] = np.nan
     with pytest.raises(ValueError):
         validate_submission(broken, sample)
+
+
+def test_15_joint_retention_head_is_initialized_from_stage1_distribution_head():
+    static = _static()
+    stage1 = build_stage1_model(_config(1), 3, 4, static, static, 5, (4, 4, 4))
+    with torch.no_grad():
+        for index, parameter in enumerate(stage1.power_head.parameters(), start=1):
+            parameter.fill_(float(index))
+    config = _config(2)
+    config["stage2"]["variant"] = "joint_finetune"
+    joint = build_stage2_model(config, 3, 4, static, static, 5, (4, 4, 4))
+    manifest = load_stage1_retention_head(joint, {"state_dict": stage1.state_dict()})
+    assert len(manifest["loaded"]) == 4
+    for source, destination in zip(stage1.power_head.parameters(), joint.hub_retention_head.parameters()):
+        assert torch.equal(source, destination)

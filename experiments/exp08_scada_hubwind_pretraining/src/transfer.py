@@ -28,6 +28,27 @@ def load_matching_encoder_weights(model: torch.nn.Module, checkpoint: Path | dic
     return {"loaded": loaded, "skipped": skipped, "source_kind": "Exp03/Exp04 champion component"}
 
 
+def load_stage1_retention_head(model: torch.nn.Module, checkpoint: Path | dict) -> dict:
+    """Initialize the joint model's retained hub-wind head from Stage 1."""
+    if getattr(model, "hub_retention_head", None) is None:
+        raise ValueError("joint Stage-2 model does not expose a hub retention head")
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False) if isinstance(checkpoint, Path) else checkpoint
+    source = payload.get("state_dict", payload)
+    destination = model.state_dict()
+    loaded = []
+    for suffix in ("0.weight", "0.bias", "2.weight", "2.bias"):
+        source_name = f"power_head.{suffix}"
+        destination_name = f"hub_retention_head.{suffix}"
+        if source_name not in source or destination_name not in destination:
+            raise ValueError(f"missing Stage-1 retention parameter: {source_name}")
+        if source[source_name].shape != destination[destination_name].shape:
+            raise ValueError(f"retention parameter shape mismatch: {source_name}")
+        destination[destination_name] = source[source_name].detach().clone()
+        loaded.append(destination_name)
+    model.load_state_dict(destination)
+    return {"loaded": loaded, "source_kind": "Stage-1 hub-wind distribution head"}
+
+
 def load_stage1_from_exp04(model: torch.nn.Module, checkpoint: Path | dict, *, auxiliary_init: bool = False) -> dict:
     """Load all shape-compatible Exp04 representation weights and optional auxiliary head."""
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False) if isinstance(checkpoint, Path) else checkpoint
