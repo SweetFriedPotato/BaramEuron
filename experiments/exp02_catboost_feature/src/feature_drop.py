@@ -1,6 +1,8 @@
 import pandas as pd
 import os
 
+DROP_LIST_FILE = "experiments/exp02_catboost_feature/configs/dropped_features_list.txt"
+
 def drop_low_importance_features(report_path, threshold=0.05):
     print("=" * 60)
     print(f"피처 중요도 분석 및 노이즈 필터링 시작 (기준값: {threshold})")
@@ -47,8 +49,8 @@ def drop_low_importance_features(report_path, threshold=0.05):
     keep_features_list = keep_df['feature'].tolist()
     
     # 텍스트 파일로 저장하여 config나 다른 코드에서 불러오기 쉽게 만듦
-    output_dir = os.path.dirname(report_path)
-    drop_log_path = os.path.join(output_dir, 'dropped_features_list.txt')
+    drop_log_path = DROP_LIST_FILE
+    os.makedirs(os.path.dirname(drop_log_path), exist_ok=True)
     
     with open(drop_log_path, 'w', encoding='utf-8') as f:
         for feat in drop_features_list:
@@ -85,4 +87,4 @@ if __name__ == "__main__":
         REPORT_FILE = "feature_importances_report.csv"
         
     # 함수 실행 -> 유지할 피처 이름 리스트 반환
-    features_to_keep = drop_low_importance_features(REPORT_FILE, threshold=0.05)
+    features_to_keep = drop_low_importance_features(REPORT_FILE, threshold=0.1)

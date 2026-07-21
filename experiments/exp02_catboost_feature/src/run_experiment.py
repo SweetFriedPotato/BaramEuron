@@ -20,9 +20,14 @@ from .features import get_monotonic_constraints
 from .feature_blocks import FeatureBlockPipeline  
 
 
-def load_dropped_features(output_root):
+def load_dropped_features(config):
     """Load feature names selected for removal by feature_drop.py."""
-    drop_list_path = Path(output_root) / "dropped_features_list.txt"
+    drop_list_path = Path(
+        config.get(
+            "feature_drop_list",
+            "experiments/exp02_catboost_feature/configs/dropped_features_list.txt",
+        )
+    )
     if not drop_list_path.exists():
         print(f"No feature drop list found at {drop_list_path}; using all features.")
         return set()
@@ -91,7 +96,7 @@ def main():
     
     output_root = args.output_root if args.output_root is not None else config.get("output_root", "experiments/exp02_catboost_feature/outputs")
     os.makedirs(output_root, exist_ok=True)
-    dropped_features = load_dropped_features(output_root)
+    dropped_features = load_dropped_features(config)
     
     print("[1/4] Loading Raw Feature Artifacts...")
     raw_artifacts = load_raw_feature_artifacts(config)
