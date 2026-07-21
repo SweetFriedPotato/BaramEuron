@@ -123,6 +123,10 @@ def test_05_scada_cleaning_statistics_are_fit_on_fold_train_only():
     assert cleaner.states["vestas"].upper < 11.0
     assert cleaner.transform(combined, "vestas").iloc[-1][columns].isna().all()
 
+    unavailable = FoldScadaCleaner().fit({"unison": combined}, fit_end=pd.Timestamp("2023-01-01"))
+    assert not unavailable.states["unison"].available_in_fold_train
+    assert unavailable.transform(combined, "unison")[columns].isna().all().all()
+
 
 def test_06_stage1_inputs_contain_no_scada_target_lag_or_disagreement():
     assert_stage1_input_schema(STAGE1_INPUT_NAMES)

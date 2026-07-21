@@ -30,6 +30,7 @@ class SourceCleaningState:
     finite_nonnegative_samples: int
     fit_start: str
     fit_end: str
+    available_in_fold_train: bool = True
 
 
 class FoldScadaCleaner:
@@ -50,7 +51,14 @@ class FoldScadaCleaner:
             raw = fit[columns].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float).reshape(-1)
             valid = raw[np.isfinite(raw) & (raw >= 0.0)]
             if valid.size == 0:
-                raise ValueError(f"no valid fold-train SCADA wind for {source}")
+                # Group 3 starts in 2023. For the 2023Q1 outer fold there is no
+                # earlier UNISON supervision, so every group-3 target must be
+                # masked rather than borrowing thresholds from validation.
+                self.states[source] = SourceCleaningState(
+                    0.0, 0.0, 0,
+                    "unavailable", "unavailable", False,
+                )
+                continue
             lower, upper = np.quantile(valid, [self.lower_quantile, self.upper_quantile])
             self.states[source] = SourceCleaningState(
                 float(max(0.0, lower)), float(upper), int(valid.size),
@@ -65,6 +73,9 @@ class FoldScadaCleaner:
         out = frame.copy()
         columns = [column for column in out if column.endswith("_ws")]
         numeric = out[columns].apply(pd.to_numeric, errors="coerce")
+        if not state.available_in_fold_train:
+            out[columns] = np.nan
+            return out
         valid = np.isfinite(numeric) & numeric.ge(0.0) & numeric.ge(state.lower) & numeric.le(state.upper)
         out[columns] = numeric.where(valid)
         return out
