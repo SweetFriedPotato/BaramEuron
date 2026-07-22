@@ -1,0 +1,5 @@
+sample_count: 401
+candidate_step_capacity_factor: 0.0025
+include: [q50, exp04_prediction]
+alphas: [0.25, 0.50, 0.75, 1.00]
+public_used_for_selection: false

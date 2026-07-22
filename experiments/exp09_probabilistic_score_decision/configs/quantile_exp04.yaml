@@ -1,0 +1,4 @@
+experiment_id: q_a_exp04
+quantile_levels: [0.05, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 0.95]
+hub_features: []
+loss: {pinball: 1.0, approximate_crps: 0.10, q50_nmae: 0.10}

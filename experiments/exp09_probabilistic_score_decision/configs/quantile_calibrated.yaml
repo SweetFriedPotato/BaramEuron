@@ -1,0 +1,4 @@
+experiment_id: q_c_calibrated
+inherits: quantile_hubwind.yaml
+hub_features: [predicted_hub_ws_median, predicted_hub_ws_mean, predicted_hub_ws_std, predicted_hub_ws_iqr, stage1_seed_std]
+calibration: group_conformal_offset
