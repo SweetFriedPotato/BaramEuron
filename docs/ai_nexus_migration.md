@@ -74,6 +74,17 @@ nvidia-smi
 Each rolling quarter writes its own checkpoint and prediction before the next
 quarter starts, so rerunning the same command resumes completed work.
 
+To run every remaining seed and phase sequentially:
+
+```bash
+source /home/work/baram/Baram/scripts/ainexus_env.sh
+nohup scripts/run_exp08_ainexus_pipeline.sh \
+  > experiments/exp08_scada_hubwind_pretraining/outputs/logs/pipeline.log 2>&1 < /dev/null &
+```
+
+The pipeline stops on the first failed phase and writes one `.exit` file per
+phase. A successful run ends with `outputs/logs/pipeline.complete`.
+
 ## Sync changes
 
 Code changes should move through Git. Large ignored artifacts can be resumed with
