@@ -1,0 +1,56 @@
+seed: 42
+
+# 1. 데이터 및 캐시 경로 설정
+data:
+  root: open
+  train_dir: open/train
+  test_dir: open/test
+  metadata: open/info.xlsx
+  sample_submission: open/sample_submission.csv
+
+# 2. 사용할 피처 블록 설정 
+features: &features
+  time: true
+  weather_summary: true
+  nearest_grid: true
+  distance_weighted_grid: true        
+
+  wind_physics: true                 
+  thermodynamic: true                
+  forecast_disagreement: true        
+  advanced_meteorology: true
+
+# 3. CatBoost 하이퍼파라미터 정의 (CatBoost 전용 문법으로 교체)
+model:
+  name: catboost
+  params:
+    iterations: 2000             
+    depth: 8                     
+    learning_rate: 0.03          
+    subsample: 0.8
+    bootstrap_type: Bernoulli               
+    #colsample_bylevel: 0.8       
+    l2_leaf_reg: 5               
+    task_type: "GPU"             
+    random_seed: 42              
+    thread_count: -1             
+
+final_iteration_multiplier: 1.0
+
+# 4. CatBoost 단조 제약 피처 정의
+monotonic_features:
+  gfs_wind_speed_100m: 1
+  ldaps_wind_speed_50m: 1
+  wind_speed_cubed: 1                 # 풍속의 세제곱 (발전량과 양의 상관관계 강제)
+  air_density: 1                      # 공기 밀도 (발전량과 양의 상관관계 강제)
+
+postprocess:
+  lower_clip: 0
+  upper_clip:
+    enabled: false
+    kpx_group_1: 21600
+    kpx_group_2: 21600
+    kpx_group_3: 21000
+
+cache_dir: baseline/cache
+output_root: experiments/exp02_catboost_feature/outputs

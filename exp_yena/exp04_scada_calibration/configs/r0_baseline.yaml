@@ -1,0 +1,3 @@
+base_config: experiments/exp04_scada_calibration/configs/base.yaml
+run_name: R0_baseline
+output_root: experiments/exp04_scada_calibration/outputs/R0_baseline
