@@ -9,7 +9,7 @@ import yaml
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Compare completed Exp04 validation runs")
-    parser.add_argument("--outputs", type=Path, default=Path("experiments/exp04_scada_calibration/outputs"))
+    parser.add_argument("--outputs", type=Path, default=Path("exp_yena/exp04_scada_calibration/outputs"))
     args = parser.parse_args()
     rows = []
     for result_path in sorted(args.outputs.glob("*/val_results.yaml")):

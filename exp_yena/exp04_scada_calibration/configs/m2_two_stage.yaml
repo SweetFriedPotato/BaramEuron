@@ -1,6 +1,6 @@
-base_config: experiments/exp04_scada_calibration/configs/base.yaml
+base_config: exp_yena/exp04_scada_calibration/configs/base.yaml
 run_name: M2_two_stage
-output_root: experiments/exp04_scada_calibration/outputs/M2_two_stage
+output_root: exp_yena/exp04_scada_calibration/outputs/M2_two_stage
 experiment:
   lead_interactions: true
   direction_features: true

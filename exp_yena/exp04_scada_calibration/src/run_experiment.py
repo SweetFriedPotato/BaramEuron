@@ -15,7 +15,7 @@ from baram.feature_builder import get_features_for_group, load_raw_feature_artif
 from baram.preprocessing import fit_tree_preprocessor
 from baram.submission import create_submission, postprocess
 from baram.validation import split_labeled_table
-from experiments.exp02_catboost_feature.src.run_experiment import (
+from exp_yena.exp02_catboost_feature.src.run_experiment import (
     FOLD_SPECS,
     apply_feature_drop,
     calculate_group_metrics,
@@ -146,16 +146,49 @@ def fit_predict(
         )
         probability = classifier.predict_proba(other_x)[:, 1]
         regression_prediction = regressor.predict(other_x)
-        probability_threshold = float(config.get("two_stage", {}).get("probability_threshold", 0.5))
-        predictions = np.where(probability >= probability_threshold, regression_prediction, 0.0)
-        return regressor, predictions
+        two_stage_config = config.get("two_stage", {})
+        gating_mode = str(two_stage_config.get("gating_mode", "hard")).lower()
+        probability_threshold = float(two_stage_config.get("probability_threshold", 0.5))
+        if gating_mode == "hard":
+            gate = (probability >= probability_threshold).astype(float)
+        elif gating_mode == "soft":
+            low = float(two_stage_config.get("soft_low_threshold", 0.05))
+            high = float(two_stage_config.get("soft_high_threshold", 0.5))
+            if not 0 <= low < high <= 1:
+                raise ValueError(
+                    "two_stage soft thresholds must satisfy "
+                    "0 <= soft_low_threshold < soft_high_threshold <= 1"
+                )
+            gate = np.clip((probability - low) / (high - low), 0.0, 1.0)
+        else:
+            raise ValueError(f"Unsupported two_stage.gating_mode: {gating_mode}")
+        predictions = gate * regression_prediction
+        calibration = two_stage_config.get("group_calibration", {}).get(
+            f"kpx_group_{group_id}", {}
+        )
+        predictions = (
+            predictions * float(calibration.get("scale", 1.0))
+            + float(calibration.get("bias", 0.0))
+        )
+        diagnostics = {
+            "generation_probability": probability,
+            "regression_prediction": regression_prediction,
+            "gate": gate,
+        }
+        return regressor, predictions, diagnostics
 
     weights = None
     if flags["sample_weighting"]:
         low_weight = float(config.get("sample_weighting", {}).get("low_generation_weight", 0.25))
         weights = np.where(train_y.to_numpy() >= threshold, 1.0, low_weight)
     model = fit_regressor(train_x, train_y, other_x if other_y is not None else None, other_y, params, config, weights)
-    return model, model.predict(other_x)
+    predictions = model.predict(other_x)
+    diagnostics = {
+        "generation_probability": np.full(len(predictions), np.nan),
+        "regression_prediction": predictions,
+        "gate": np.ones(len(predictions)),
+    }
+    return model, predictions, diagnostics
 
 
 def merge_direction_features(
@@ -280,7 +313,7 @@ def main() -> None:
     if args.iterations is not None:
         config["model"]["params"]["iterations"] = args.iterations
     flags = experiment_flags(config)
-    output_root = Path(args.output_root or config.get("output_root", "experiments/exp04_scada_calibration/outputs"))
+    output_root = Path(args.output_root or config.get("output_root", "exp_yena/exp04_scada_calibration/outputs"))
     output_root.mkdir(parents=True, exist_ok=True)
     (output_root / "resolved_config.yaml").write_text(
         yaml.safe_dump(config, allow_unicode=True, sort_keys=False), encoding="utf-8"
@@ -298,6 +331,7 @@ def main() -> None:
     oof_frames: list[pd.DataFrame] = []
     metric_rows: list[dict] = []
     importance_frames: list[pd.DataFrame] = []
+    test_diagnostic_frames: list[pd.DataFrame] = []
     best_iterations = {1: [], 2: [], 3: []}
     validation_runs = [
         (spec["fold"], group_id, spec["validation"])
@@ -330,7 +364,7 @@ def main() -> None:
             train_x, val_x = add_scada_features(
                 train_x, val_x, train_scada, config, flags
             )
-        model, raw_predictions = fit_predict(
+        model, raw_predictions, diagnostics = fit_predict(
             train_x, train[target], val_x, val[target], group_id, config, flags
         )
         predictions = postprocess(raw_predictions, target, config.get("postprocess", {}))
@@ -352,6 +386,9 @@ def main() -> None:
         oof_frames.append(pd.DataFrame({
             TIME_COL: val[TIME_COL], "fold": fold_name, "group_id": group_id, "target": target,
             "y_true": val[target], "raw_prediction": raw_predictions, "prediction": predictions,
+            "generation_probability": diagnostics["generation_probability"],
+            "regression_prediction": diagnostics["regression_prediction"],
+            "gate": diagnostics["gate"],
             "absolute_error": np.abs(predictions - val[target].to_numpy()),
             "error_rate": np.abs(predictions - val[target].to_numpy()) / capacity,
             "valid_for_metric": val[target].to_numpy() >= capacity * 0.10,
@@ -411,15 +448,29 @@ def main() -> None:
             )
         multiplier = float(config.get("final_iteration_multiplier", 1.0))
         iterations = max(1, int(round(np.median(best_iterations[group_id]) * multiplier)))
-        model, raw_predictions = fit_predict(
+        model, raw_predictions, diagnostics = fit_predict(
             train_x, train_table[target], test_x, None, group_id, config, flags, iterations
         )
         final_predictions[target] = postprocess(
             raw_predictions, target, config.get("postprocess", {})
         )
+        test_diagnostic_frames.append(pd.DataFrame({
+            TIME_COL: test_features_group[TIME_COL].to_numpy(),
+            "group_id": group_id,
+            "target": target,
+            "generation_probability": diagnostics["generation_probability"],
+            "regression_prediction": diagnostics["regression_prediction"],
+            "gate": diagnostics["gate"],
+            "prediction": final_predictions[target],
+        }))
 
     submission_dir = output_root / "submissions"
     submission_dir.mkdir(parents=True, exist_ok=True)
+    pd.concat(test_diagnostic_frames, ignore_index=True).to_csv(
+        output_root / "test_gating_diagnostics.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
     create_submission(sample, final_predictions, path=submission_dir / "submission_exp04.csv")
     print(f"Experiment complete: {output_root}")
 

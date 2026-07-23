@@ -6,7 +6,7 @@ import pandas as pd
 from baram.constants import TIME_COL
 from baram.data import load_gfs, load_ldaps, load_metadata
 from baram.features.spatial import group_centres
-from experiments.exp02_catboost_feature.src.feature_blocks import FeatureBlockPipeline
+from exp_yena.exp02_catboost_feature.src.feature_blocks import FeatureBlockPipeline
 
 
 VECTOR_COLUMNS = {

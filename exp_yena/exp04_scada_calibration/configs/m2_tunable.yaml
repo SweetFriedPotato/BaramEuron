@@ -1,0 +1,15 @@
+base_config: exp_yena/exp04_scada_calibration/configs/m2_two_stage.yaml
+run_name: M2_tunable
+output_root: exp_yena/exp04_scada_calibration/outputs/M2_tunable
+
+two_stage:
+  # This first run only needs to preserve probabilities and regression outputs.
+  # tune_gating.py will select the best mode, thresholds, scale, and bias from OOF.
+  gating_mode: soft
+  probability_threshold: 0.25
+  soft_low_threshold: 0.05
+  soft_high_threshold: 0.45
+  group_calibration:
+    kpx_group_1: {scale: 1.0, bias: 0.0}
+    kpx_group_2: {scale: 1.0, bias: 0.0}
+    kpx_group_3: {scale: 1.0, bias: 0.0}

@@ -75,7 +75,7 @@ experiment:
   two_stage: false
 
 use_feature_drop: true
-feature_drop_list: experiments/exp02_catboost_feature/configs/dropped_features_list.txt
+feature_drop_list: exp_yena/exp02_catboost_feature/configs/dropped_features_list.txt
 require_gpu: true
 final_iteration_multiplier: 1.0
 
@@ -88,4 +88,4 @@ postprocess:
     kpx_group_3: 21000
 
 cache_dir: baseline/cache
-output_root: experiments/exp04_scada_calibration/outputs/base
+output_root: exp_yena/exp04_scada_calibration/outputs/base

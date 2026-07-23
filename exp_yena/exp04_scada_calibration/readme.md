@@ -23,9 +23,9 @@ M1과 M2는 서로 다른 실험이며 동시에 켤 수 없다.
 ## S0 analysis
 
 ```powershell
-python -m experiments.exp04_scada_calibration.src.analyze_scada `
-  --config experiments/exp04_scada_calibration/configs/r0_baseline.yaml `
-  --output-root experiments/exp04_scada_calibration/outputs/S0_analysis
+python -m exp_yena.exp04_scada_calibration.src.analyze_scada `
+  --config exp_yena/exp04_scada_calibration/configs/r0_baseline.yaml `
+  --output-root exp_yena/exp04_scada_calibration/outputs/S0_analysis
 ```
 
 S0는 `scada_quality_summary.csv`, group별 hourly table과
@@ -35,9 +35,9 @@ S0는 `scada_quality_summary.csv`, group별 hourly table과
 ## Validation run
 
 ```powershell
-python -m experiments.exp04_scada_calibration.src.run_experiment `
-  --config experiments/exp04_scada_calibration/configs/r1_lead.yaml `
-  --output-root experiments/exp04_scada_calibration/outputs/R1_lead `
+python -m exp_yena.exp04_scada_calibration.src.run_experiment `
+  --config exp_yena/exp04_scada_calibration/configs/r1_lead.yaml `
+  --output-root exp_yena/exp04_scada_calibration/outputs/R1_lead `
   --no-finalize
 ```
 
@@ -49,15 +49,15 @@ model도 여러 번 cross-fit하므로 `base.yaml`의 `auxiliary_model_params.it
 
 ```powershell
 $RunId = "$(Get-Date -Format yyyyMMdd_HHmmss)_R1_lead"
-$Output = "experiments/exp04_scada_calibration/outputs/$RunId"
+$Output = "exp_yena/exp04_scada_calibration/outputs/$RunId"
 
 .\colab\windows\Invoke-ColabPython.ps1 -Distro $Distro -Session $Session `
   -ScriptPath .\colab\run_and_sync.py `
   --source $Output `
   --experiment exp04_scada_calibration `
   --run-id $RunId -- `
-  python -m experiments.exp04_scada_calibration.src.run_experiment `
-  --config experiments/exp04_scada_calibration/configs/r1_lead.yaml `
+  python -m exp_yena.exp04_scada_calibration.src.run_experiment `
+  --config exp_yena/exp04_scada_calibration/configs/r1_lead.yaml `
   --output-root $Output `
   --no-finalize
 ```
@@ -65,8 +65,31 @@ $Output = "experiments/exp04_scada_calibration/outputs/$RunId"
 ## Comparison
 
 ```powershell
-python -m experiments.exp04_scada_calibration.src.compare_runs
+python -m exp_yena.exp04_scada_calibration.src.compare_runs
 ```
+
+## M2 gating tuning on AI NEXUS
+
+Run from `/home/work/baram/Baram-yena` in Bash:
+
+```bash
+export PYTHONPATH="$PWD/baseline/src:$PWD:$PYTHONPATH"
+
+python3 -m exp_yena.exp04_scada_calibration.src.run_experiment \
+  --config exp_yena/exp04_scada_calibration/configs/m2_tunable.yaml \
+  --output-root exp_yena/exp04_scada_calibration/outputs/M2_tunable_validation \
+  --no-finalize
+
+python3 -m exp_yena.exp04_scada_calibration.src.tune_gating \
+  --oof exp_yena/exp04_scada_calibration/outputs/M2_tunable_validation/oof_predictions.csv \
+  --output-root exp_yena/exp04_scada_calibration/outputs/M2_gating_search
+```
+
+The validation run stores `generation_probability`, `regression_prediction`,
+and `gate` in `oof_predictions.csv`. The tuning command compares hard and soft
+gating, then searches a scale and bias for each generation group. The generated
+`M2_gating_search/best_gating.yaml` inherits from `m2_two_stage.yaml` and can be
+used directly as the config for the final validation and submission run.
 
 모든 run에서 `oof_predictions.csv`, `fold_group_metrics.csv`,
 `best_iterations.csv`, `feature_importances_by_fold.csv`, `val_results.yaml`을 저장한다.
