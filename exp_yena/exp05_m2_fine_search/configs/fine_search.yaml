@@ -1,0 +1,22 @@
+inputs:
+  oof: exp_yena/exp04_scada_calibration/outputs/M2_tunable_validation/oof_predictions.csv
+  test_diagnostics: exp_yena/exp04_scada_calibration/outputs/M2_optimized_final/test_gating_diagnostics.csv
+  sample_submission: open/sample_submission.csv
+
+search:
+  threshold:
+    start: 0.0
+    stop: 0.10
+    step: 0.005
+  groups:
+    kpx_group_1:
+      scale: {start: 1.10, stop: 1.25, step: 0.005}
+      bias: {start: -500, stop: 1000, step: 100}
+    kpx_group_2:
+      scale: {start: 1.08, stop: 1.18, step: 0.005}
+      bias: {start: -1400, stop: -300, step: 100}
+    kpx_group_3:
+      scale: {start: 1.08, stop: 1.18, step: 0.005}
+      bias: {start: -1400, stop: -300, step: 100}
+
+output_root: exp_yena/exp05_m2_fine_search/outputs/fine_search
